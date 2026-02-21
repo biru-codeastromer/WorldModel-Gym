@@ -148,6 +148,10 @@ class CraftLiteEnv(BaseGridEnv):
             {
                 "inventory": dict(self.inventory),
                 "achievements": dict(self.achievements),
+                "station_pos": [int(self.station_pos[0]), int(self.station_pos[1])],
+                "gem_pos": [int(self.gem_pos[0]), int(self.gem_pos[1])],
+                "wood_positions": [[int(p[0]), int(p[1])] for p in self.wood if p[0] >= 0],
+                "rock_positions": [[int(p[0]), int(p[1])] for p in self.rock if p[0] >= 0],
             }
         )
         return base

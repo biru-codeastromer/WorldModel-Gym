@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import copy
 from typing import Any
 
 import gymnasium as gym
@@ -77,6 +78,7 @@ class BaseGridEnv(gym.Env):
         info = {
             "events": [],
             "episode_id": self.episode_id,
+            "oracle_hint": self._trace_state(),
         }
         return obs, info
 
@@ -90,6 +92,7 @@ class BaseGridEnv(gym.Env):
         info: dict[str, Any] = {
             "events": events,
             "step": self.step_count,
+            "oracle_hint": self._trace_state(),
         }
 
         trace_step = TraceStep(
@@ -179,6 +182,17 @@ class BaseGridEnv(gym.Env):
         return {
             "agent_pos": [int(self.agent_pos[0]), int(self.agent_pos[1])],
         }
+
+    def clone_env_state(self) -> dict[str, Any]:
+        return copy.deepcopy(self.__dict__)
+
+    def simulate_from_state(self, env_state: dict[str, Any], action: int):
+        snapshot = self.clone_env_state()
+        self.__dict__.update(copy.deepcopy(env_state))
+        _obs, reward, terminated, truncated, _info = self.step(action)
+        next_state = self.clone_env_state()
+        self.__dict__.update(snapshot)
+        return next_state, float(reward), bool(terminated or truncated)
 
     def _reset_state(self, seed: int | None = None) -> None:
         raise NotImplementedError

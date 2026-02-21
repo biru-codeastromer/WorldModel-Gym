@@ -104,5 +104,16 @@ class SwitchQuestEnv(BaseGridEnv):
 
     def _trace_state(self) -> dict:
         base = super()._trace_state()
-        base.update({"progress": self.progress, "n_switches": self.config.n_switches})
+        next_target = None
+        if self.progress < self.config.n_switches:
+            idx = int(self.sequence[self.progress])
+            next_target = [int(self.switches[idx][0]), int(self.switches[idx][1])]
+        base.update(
+            {
+                "progress": self.progress,
+                "n_switches": self.config.n_switches,
+                "switches": [[int(p[0]), int(p[1])] for p in self.switches],
+                "next_target_pos": next_target,
+            }
+        )
         return base

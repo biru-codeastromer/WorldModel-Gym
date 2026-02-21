@@ -109,6 +109,8 @@ class MemoryMazeEnv(BaseGridEnv):
             {
                 "has_key": self.has_key,
                 "door_open": self.door_open,
+                "key_pos": [int(self.key_pos[0]), int(self.key_pos[1])],
+                "door_pos": [int(self.door_pos[0]), int(self.door_pos[1])],
                 "goal_pos": [int(self.goal_pos[0]), int(self.goal_pos[1])],
             }
         )
