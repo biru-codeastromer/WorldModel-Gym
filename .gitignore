@@ -11,6 +11,7 @@ venv/
 *.egg-info/
 node_modules/
 .next/
+.vercel/
 .expo/
 .expo-shared/
 dist/

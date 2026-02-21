@@ -56,4 +56,11 @@ make deploy
 make stop
 make deploy-public
 make stop-public
+make deploy-vercel
 ```
+
+## Free Cloud Deploy
+
+- API: deploy `render.yaml` on Render Blueprint (free web service).
+- Web: deploy `web/` on Vercel Hobby with `NEXT_PUBLIC_API_BASE` set to the Render API URL.
+- Full steps: `docs/DEPLOYMENT.md`.

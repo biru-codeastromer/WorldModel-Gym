@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: worldmodel-gym-api
+    env: docker
+    dockerfilePath: ./docker/server.Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: WMG_DB_URL
+        value: sqlite:////tmp/worldmodel_gym.db
+      - key: WMG_STORAGE_DIR
+        value: /tmp/storage
+      - key: WMG_UPLOAD_TOKEN
+        generateValue: true

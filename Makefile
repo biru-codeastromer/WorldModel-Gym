@@ -2,7 +2,7 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(VENV)/bin/pip
 
-.PHONY: setup test lint demo paper deploy stop deploy-public stop-public
+.PHONY: setup test lint demo paper deploy stop deploy-public stop-public deploy-vercel
 
 setup:
 	python3 -m venv $(VENV)
@@ -49,3 +49,6 @@ deploy-public:
 
 stop-public:
 	./scripts/stop_public.sh
+
+deploy-vercel:
+	./scripts/deploy_vercel.sh

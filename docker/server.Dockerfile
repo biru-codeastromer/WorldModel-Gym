@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -e core -e planners -e worldmodels -e agents -e server
 
 EXPOSE 8000
-CMD ["uvicorn", "worldmodel_server.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn worldmodel_server.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
