@@ -196,8 +196,9 @@ def evaluate_and_write(
     max_episodes: int,
     budget: dict,
     out_dir: str = "runs",
+    run_id: str | None = None,
 ) -> tuple[str, Path]:
-    run_id = uuid.uuid4().hex[:12]
+    run_id = run_id or uuid.uuid4().hex[:12]
     run_dir = Path(out_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,27 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    container_name: wmg-server
+    environment:
+      - WMG_UPLOAD_TOKEN=dev-token
+      - WMG_DB_URL=sqlite:////app/server/storage/worldmodel_gym.db
+      - WMG_STORAGE_DIR=/app/server/storage
+    volumes:
+      - ./server/storage:/app/server/storage
+      - ./runs:/app/runs
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    container_name: wmg-web
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - server
+    ports:
+      - "3000:3000"
