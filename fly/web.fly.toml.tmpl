@@ -1,0 +1,21 @@
+app = "__WEB_APP__"
+primary_region = "iad"
+
+[build]
+  dockerfile = "docker/web.fly.Dockerfile"
+
+[build.args]
+  NEXT_PUBLIC_API_BASE = "__API_BASE__"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory_mb = 1024
+  cpus = 1
+  cpu_kind = "shared"

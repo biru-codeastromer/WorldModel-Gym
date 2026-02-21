@@ -54,4 +54,5 @@ make test
 make paper
 make deploy
 make stop
+make deploy-fly
 ```

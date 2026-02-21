@@ -21,6 +21,8 @@ htmlcov/
 *.log
 runs/*
 !runs/.gitkeep
+.tmp/
+worldmodel_gym.db
 paper/*.aux
 paper/*.bbl
 paper/*.blg

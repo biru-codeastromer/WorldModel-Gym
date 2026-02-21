@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -16,6 +17,13 @@ from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
 from worldmodel_server.storage import ensure_storage_dirs, load_json, run_dir, save_upload_file
 
 app = FastAPI(title=settings.app_name)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
