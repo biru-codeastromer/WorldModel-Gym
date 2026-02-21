@@ -3,17 +3,19 @@ from __future__ import annotations
 import copy
 
 import numpy as np
+from worldmodel_models.registry import create_world_model
+from worldmodel_planners.mpc_cem import MPCCEMPlanner
 
 from worldmodel_agents.base import AgentConfig, BaseAgent
-from worldmodel_planners.mpc_cem import MPCCEMPlanner
-from worldmodel_models.registry import create_world_model
 
 
 class ImaginationMPCAgent(BaseAgent):
     def __init__(self, config: AgentConfig | None = None):
         super().__init__(config=config)
         self.world_model = create_world_model("ensemble")
-        self.planner = MPCCEMPlanner(action_space_n=self.config.action_space_n, horizon=10, population=64, iterations=3)
+        self.planner = MPCCEMPlanner(
+            action_space_n=self.config.action_space_n, horizon=10, population=64, iterations=3
+        )
         self.latent = self.world_model.init_state(batch_size=1)
         self.buffer: list[dict] = []
         self.rng = np.random.default_rng(0)

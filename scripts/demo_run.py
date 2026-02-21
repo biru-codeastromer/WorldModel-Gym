@@ -5,10 +5,8 @@ import uuid
 from pathlib import Path
 
 import httpx
-
 from worldmodel_agents.registry import create_agent
 from worldmodel_gym.eval.harness import evaluate_and_write
-
 
 API = "http://localhost:8000"
 TOKEN = "dev-token"
@@ -52,7 +50,11 @@ def main() -> None:
     )
 
     files = {
-        "metrics_file": ("metrics.json", (run_dir / "metrics.json").read_bytes(), "application/json"),
+        "metrics_file": (
+            "metrics.json",
+            (run_dir / "metrics.json").read_bytes(),
+            "application/json",
+        ),
         "trace_file": ("trace.jsonl", (run_dir / "trace.jsonl").read_bytes(), "application/json"),
         "config_file": ("config.yaml", (run_dir / "config.yaml").read_bytes(), "text/yaml"),
     }

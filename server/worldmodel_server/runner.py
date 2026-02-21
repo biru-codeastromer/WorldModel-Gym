@@ -3,7 +3,6 @@ from __future__ import annotations
 import subprocess
 
 
-
 def run_local_submission(agent: str, env: str, track: str = "test") -> int:
     cmd = [
         "python",

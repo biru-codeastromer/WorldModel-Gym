@@ -187,8 +187,11 @@ def healthz():
 
 @app.post("/api/runs/{run_id}/trigger")
 def trigger_demo_run(run_id: str):
-    return {"status": "accepted", "run_id": run_id, "note": "Use scripts/demo_run.py for local runner."}
-
+    return {
+        "status": "accepted",
+        "run_id": run_id,
+        "note": "Use scripts/demo_run.py for local runner.",
+    }
 
 
 def _parse_metrics(raw: str) -> dict:
@@ -199,7 +202,6 @@ def _parse_metrics(raw: str) -> dict:
         if p.exists():
             return load_json(p)
         return {}
-
 
 
 def _to_response(item: RunEntry) -> RunResponse:

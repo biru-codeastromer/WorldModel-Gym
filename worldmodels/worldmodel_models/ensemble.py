@@ -10,7 +10,9 @@ from worldmodel_models.deterministic import DeterministicLatentModel
 
 class EnsembleWorldModel:
     def __init__(self, n_models: int = 5, config: ModelConfig | None = None):
-        self.models = [DeterministicLatentModel(config=config or ModelConfig()) for _ in range(n_models)]
+        self.models = [
+            DeterministicLatentModel(config=config or ModelConfig()) for _ in range(n_models)
+        ]
 
     def init_state(self, batch_size: int = 1):
         return [m.init_state(batch_size=batch_size) for m in self.models]

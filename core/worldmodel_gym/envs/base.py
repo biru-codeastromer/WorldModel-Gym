@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import copy
+from dataclasses import dataclass
 from typing import Any
 
 import gymnasium as gym
@@ -46,7 +46,9 @@ class BaseGridEnv(gym.Env):
         self.action_space = spaces.Discrete(8)
         self._rng = np.random.default_rng(0)
 
-        symbolic_space = spaces.Box(low=0.0, high=1.0, shape=(16, self.grid_size, self.grid_size), dtype=np.float32)
+        symbolic_space = spaces.Box(
+            low=0.0, high=1.0, shape=(16, self.grid_size, self.grid_size), dtype=np.float32
+        )
         rgb_space = spaces.Box(low=0, high=255, shape=(64, 64, 3), dtype=np.uint8)
 
         if self.config.obs_mode == "rgb":

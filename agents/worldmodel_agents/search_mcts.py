@@ -3,10 +3,10 @@ from __future__ import annotations
 import copy
 
 import numpy as np
-
-from worldmodel_agents.base import AgentConfig, BaseAgent
 from worldmodel_models.registry import create_world_model
 from worldmodel_planners.mcts import MCTSPlanner
+
+from worldmodel_agents.base import AgentConfig, BaseAgent
 
 
 class SearchMCTSAgent(BaseAgent):
@@ -15,7 +15,9 @@ class SearchMCTSAgent(BaseAgent):
     def __init__(self, config: AgentConfig | None = None):
         super().__init__(config=config)
         self.world_model = create_world_model("deterministic")
-        self.planner = MCTSPlanner(action_space_n=self.config.action_space_n, num_simulations=56, max_depth=14)
+        self.planner = MCTSPlanner(
+            action_space_n=self.config.action_space_n, num_simulations=56, max_depth=14
+        )
         self.latent = self.world_model.init_state(batch_size=1)
         self.buffer: list[dict] = []
         self.rng = np.random.default_rng(0)
@@ -32,7 +34,9 @@ class SearchMCTSAgent(BaseAgent):
         self.latent = self.world_model.observe(self.latent, obs)
 
         def transition_fn(state, action):
-            next_state, _pred_obs, pred_reward, pred_done, _aux = self.world_model.predict(state, int(action))
+            next_state, _pred_obs, pred_reward, pred_done, _aux = self.world_model.predict(
+                state, int(action)
+            )
             return next_state, float(pred_reward), bool(pred_done)
 
         result = self.planner.plan(

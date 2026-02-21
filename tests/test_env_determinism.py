@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 
 import numpy as np
-
 from worldmodel_gym.envs.registry import make_env
 
 
@@ -30,15 +29,12 @@ def _check_seed(env_id: str):
     assert _hash_obs(obs_a) != _hash_obs(obs_c)
 
 
-
 def test_memory_maze_seed_determinism():
     _check_seed("memory_maze")
 
 
-
 def test_switch_quest_seed_determinism():
     _check_seed("switch_quest")
-
 
 
 def test_craft_lite_seed_determinism():

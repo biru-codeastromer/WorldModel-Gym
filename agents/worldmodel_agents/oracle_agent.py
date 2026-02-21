@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import copy
 
-from worldmodel_agents.base import AgentConfig, BaseAgent
 from worldmodel_planners.mcts import MCTSPlanner
+
+from worldmodel_agents.base import AgentConfig, BaseAgent
 
 
 def _move_toward(agent_pos: list[int], target_pos: list[int]) -> int:
@@ -64,7 +65,9 @@ class GreedyOracleAgent(BaseAgent):
 class PlannerOnlyOracleAgent(BaseAgent):
     def __init__(self, config: AgentConfig | None = None):
         super().__init__(config=config)
-        self.planner = MCTSPlanner(action_space_n=self.config.action_space_n, num_simulations=48, max_depth=18)
+        self.planner = MCTSPlanner(
+            action_space_n=self.config.action_space_n, num_simulations=48, max_depth=18
+        )
 
     def act(self, obs, info: dict) -> int:
         del obs

@@ -43,7 +43,9 @@ class MCTSPlanner:
         legal_actions_fn: Callable[[Any], list[int]] | None = None,
     ) -> PlanningResult:
         if legal_actions_fn is None:
-            legal_actions_fn = lambda _state: list(range(self.action_space_n))
+
+            def legal_actions_fn(_state: Any) -> list[int]:
+                return list(range(self.action_space_n))
 
         root = MCTSNode(parent=None, action_from_parent=None)
         max_reached_depth = 0

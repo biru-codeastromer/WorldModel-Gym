@@ -71,7 +71,12 @@ class MemoryMazeEnv(BaseGridEnv):
             self.has_key = True
             events.append("found_key")
 
-        if action == 5 and self.has_key and self._adjacent(self.agent_pos, self.door_pos) and not self.door_open:
+        if (
+            action == 5
+            and self.has_key
+            and self._adjacent(self.agent_pos, self.door_pos)
+            and not self.door_open
+        ):
             self.door_open = True
             events.append("opened_door")
 

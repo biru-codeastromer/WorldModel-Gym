@@ -35,5 +35,8 @@ class TrajectorySamplingPlanner:
             action=best_action,
             value=best_score,
             imagined_transitions=self.num_trajectories * self.horizon,
-            trace={"planner": "trajectory_sampling", "top_rollouts": sorted(samples, key=lambda x: x["score"], reverse=True)[:5]},
+            trace={
+                "planner": "trajectory_sampling",
+                "top_rollouts": sorted(samples, key=lambda x: x["score"], reverse=True)[:5],
+            },
         )

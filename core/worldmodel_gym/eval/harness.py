@@ -11,13 +11,19 @@ import numpy as np
 import yaml
 
 from worldmodel_gym.envs.registry import make_env
-from worldmodel_gym.eval.continual import ContinualSchedule, apply_shift_kwargs, continual_transfer_metrics
+from worldmodel_gym.eval.continual import (
+    ContinualSchedule,
+    apply_shift_kwargs,
+    continual_transfer_metrics,
+)
 from worldmodel_gym.eval.metrics import EpisodeStats, aggregate_episode_stats
 from worldmodel_gym.eval.seeds import TEST_SEEDS, TRAIN_SEEDS
 from worldmodel_gym.trace.schema import EpisodeTrace, RunMetrics
 
 
-def _reward_prediction_error(agent, transitions: list[tuple], ks: tuple[int, ...] = (1, 5, 10)) -> dict[str, float]:
+def _reward_prediction_error(
+    agent, transitions: list[tuple], ks: tuple[int, ...] = (1, 5, 10)
+) -> dict[str, float]:
     world_model = getattr(agent, "world_model", None)
     if world_model is None or not transitions:
         return {f"k{k}": 0.0 for k in ks}
@@ -27,7 +33,9 @@ def _reward_prediction_error(agent, transitions: list[tuple], ks: tuple[int, ...
 
     for obs, action, reward, done, _next_obs in transitions:
         state = world_model.observe(state, _obs_to_array(obs))
-        pred_state, _pred_obs, pred_reward, pred_done, _aux = world_model.predict(state, int(action))
+        pred_state, _pred_obs, pred_reward, pred_done, _aux = world_model.predict(
+            state, int(action)
+        )
         state = pred_state
         for k in ks:
             errors[k].append(abs(float(pred_reward) - float(reward)))
@@ -68,7 +76,12 @@ def evaluate_episodes(
 
         if continual_schedule is not None:
             shift_idx = ep_idx // continual_schedule.shift_every_episodes
-            kwargs = apply_shift_kwargs(kwargs, env_id=env_id, shift_idx=shift_idx, shift_strength=continual_schedule.shift_strength)
+            kwargs = apply_shift_kwargs(
+                kwargs,
+                env_id=env_id,
+                shift_idx=shift_idx,
+                shift_strength=continual_schedule.shift_strength,
+            )
 
         env = make_env(env_id, **kwargs)
         obs, info = env.reset(seed=seed)
@@ -207,7 +220,11 @@ def evaluate_and_write(
     if seeds:
         eval_seeds = seeds
     else:
-        eval_seeds = TEST_SEEDS.get(env_id, [123, 456]) if track != "train" else TRAIN_SEEDS.get(env_id, [11, 13])
+        eval_seeds = (
+            TEST_SEEDS.get(env_id, [123, 456])
+            if track != "train"
+            else TRAIN_SEEDS.get(env_id, [11, 13])
+        )
 
     train_agent = agent_factory(agent_name)
     test_agent = agent_factory(agent_name)

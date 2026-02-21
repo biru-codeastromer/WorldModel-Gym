@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import torch
 
 from worldmodel_models.common import ModelConfig, TorchModelBase
@@ -27,7 +26,9 @@ class DeterministicLatentModel(TorchModelBase):
         self.done_head = torch.nn.Linear(c.latent_dim, 1)
 
     def init_state(self, batch_size: int = 1) -> dict[str, torch.Tensor]:
-        latent = torch.zeros((batch_size, self.config.latent_dim), dtype=torch.float32, device=self.device)
+        latent = torch.zeros(
+            (batch_size, self.config.latent_dim), dtype=torch.float32, device=self.device
+        )
         return {"latent": latent}
 
     def observe(self, prev_state: dict[str, torch.Tensor], obs) -> dict[str, torch.Tensor]:
@@ -84,14 +85,20 @@ class DeterministicLatentModel(TorchModelBase):
 
         for item in batch:
             state = self.observe(self.init_state(batch_size=1), item["obs"])
-            next_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(state, int(item["action"]))
+            next_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(
+                state, int(item["action"])
+            )
             del next_state
 
             target_reward = torch.tensor([item["reward"]], device=self.device)
             target_done = torch.tensor([float(item["done"])], device=self.device)
 
-            reward_loss = (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
-            done_loss = (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
+            reward_loss = (
+                (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
+            )
+            done_loss = (
+                (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
+            )
             loss = loss + reward_loss + done_loss
 
         loss = loss / len(batch)

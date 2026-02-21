@@ -94,14 +94,20 @@ class StochasticLatentModel(TorchModelBase):
 
         for item in batch:
             posterior_state = self.observe(self.init_state(batch_size=1), item["obs"])
-            pred_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(posterior_state, int(item["action"]))
+            pred_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(
+                posterior_state, int(item["action"])
+            )
             del pred_state
 
             target_reward = torch.tensor([item["reward"]], device=self.device)
             target_done = torch.tensor([float(item["done"])], device=self.device)
 
-            reward_loss = (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
-            done_loss = (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
+            reward_loss = (
+                (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
+            )
+            done_loss = (
+                (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
+            )
 
             mean = posterior_state["mean"]
             logvar = posterior_state["logvar"]

@@ -3,10 +3,8 @@ from __future__ import annotations
 import copy
 
 import numpy as np
-
 from worldmodel_planners.mcts import MCTSPlanner
 from worldmodel_planners.mpc_cem import MPCCEMPlanner
-
 
 
 def _transition(state, action):
@@ -15,7 +13,6 @@ def _transition(state, action):
     reward = 1.0 if action == 1 else 0.0
     done = new_state["t"] >= 5
     return new_state, reward, done
-
 
 
 def _rollout(state, seq: np.ndarray):
@@ -28,7 +25,6 @@ def _rollout(state, seq: np.ndarray):
     return total, {}
 
 
-
 def test_mcts_respects_budget():
     planner = MCTSPlanner(action_space_n=3, num_simulations=20, max_depth=7)
     result = planner.plan(
@@ -39,7 +35,6 @@ def test_mcts_respects_budget():
 
     assert result.trace["num_simulations"] == 20
     assert result.trace["max_reached_depth"] <= 7
-
 
 
 def test_mpc_cem_respects_budget():
