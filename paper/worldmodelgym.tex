@@ -1,0 +1,57 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[numbers]{natbib}
+
+\title{WorldModel Gym: A Long-Horizon Planning Benchmark for Imagination-Based Agents}
+\author{WorldModel Gym Team}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Imagination-based reinforcement learning combines learned dynamics models with explicit planning to address long-horizon decision making. Existing benchmarks do not consistently stress delayed reward, partial observability, and procedural generalization under reproducible evaluation constraints. We introduce \textbf{WorldModel Gym}, a benchmark and evaluation platform centered on three lightweight task families---MemoryMaze, SwitchQuest, and CraftLite---designed to expose sparse credit assignment, memory demands, and compositional subgoal structure. The platform provides deterministic train/test seed tracks, optional continual nonstationarity, standardized trace logging, and planning-cost reporting to contextualize performance. We release a complete open-source stack including environments, baseline agents, planner implementations (MCTS and MPC-CEM), a leaderboard API, and web/mobile run viewers.
+\end{abstract}
+
+\section{Motivation and Research Questions}
+World models are central to scalable model-based RL and planning systems \citep{ha2018worldmodels,hafner2019planet,hafner2019dreamer,schrittwieser2020muzero,hansen2023tdmpc2}. Yet benchmark conclusions are often sensitive to observability assumptions, procedural overfitting, and underreported planning compute. WorldModel Gym targets these gaps with the following questions:
+\begin{enumerate}
+    \item How do imagination-based agents trade off model fidelity and planning budget under sparse rewards?
+    \item What is the generalization gap between procedural train and held-out test seed distributions?
+    \item Under nonstationary dynamics, which methods retain prior competency while adapting quickly?
+\end{enumerate}
+
+\section{Related Work}
+WorldModel Gym builds on model-based RL and latent planning, including World Models \citep{ha2018worldmodels}, PlaNet \citep{hafner2019planet}, Dreamer \citep{hafner2019dreamer}, and MuZero \citep{schrittwieser2020muzero}. We include classical online planning references such as POMCP \citep{silver2010pomcp} and DESPOT \citep{somani2013despot,ye2017despot}. For benchmark design, we draw from DeepMind Lab \citep{beattie2016dmlab}, Procgen \citep{cobbe2019procgen,cobbe2021ppg}, and Crafter \citep{hafner2021crafter}. Continual evaluation follows recent continual RL survey and synthesis efforts \citep{pan2025crlsurvey,wang2025continualrlbook}.
+
+\section{Benchmark Design}
+\paragraph{Task families.}
+\textbf{MemoryMaze} is a grid POMDP with restricted FOV, key-door dependency, and terminal success reward. \textbf{SwitchQuest} requires discovering and executing hidden switch sequences under partial observations. \textbf{CraftLite} is a lightweight crafting world with compositional resource dependencies and optional strict sparse reward.
+
+\paragraph{Observation modes.}
+Each environment returns RGB ($64\times64$), symbolic tensor channels, or both. Semantic events are emitted at each step, enabling a stable episode-trace format for analysis and visualization.
+
+\paragraph{Tracks.}
+We define train and test procedural seed tracks and a continual track where task distribution shifts occur every fixed episode interval.
+
+\section{Evaluation and Baselines}
+\paragraph{Agents and planners.}
+We provide random and oracle diagnostics, model-free and imagination-based baselines, and planner-only ceilings. Planning modules include MCTS and MPC with CEM.
+
+\paragraph{Metrics.}
+Primary metrics include success rate, mean return, median steps-to-success, achievement completion, and planning cost (latency, imagined transitions, memory). Model fidelity reports $k$-step reward prediction errors for $k\in\{1,5,10\}$. Generalization gap is computed as train-test performance delta. Continual metrics include forward transfer, backward transfer, and forgetting.
+
+\section{Platform and Reproducibility}
+The platform includes a FastAPI backend with SQLite persistence, artifact uploads, leaderboard queries, and task/run discovery endpoints. A Next.js dashboard and Expo mobile viewer expose task browsing, leaderboard filtering, and trace visualization. Docker and CI workflows support CPU-first reproducibility.
+
+\section{Limitations and Ethics}
+Benchmark optimization can incentivize compute-heavy planning strategies; we therefore log and display planning cost alongside return. Synthetic tasks do not guarantee real-world transfer, and procedural generation may still admit exploitable artifacts. Released traces may leak structural priors if not carefully partitioned. We encourage reporting uncertainty, compute budgets, and failure modes in all submissions.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
