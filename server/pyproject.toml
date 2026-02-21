@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "worldmodel-gym-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.6",
+  "uvicorn>=0.34.0",
+  "sqlalchemy>=2.0.36",
+  "pydantic>=2.10.3",
+  "python-multipart>=0.0.20",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["worldmodel_server*"]
