@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "WorldModel Gym Viewer",
+    "slug": "worldmodel-gym-viewer",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
