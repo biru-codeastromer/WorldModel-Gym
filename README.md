@@ -52,4 +52,6 @@ Artifacts are written to `runs/<run_id>/`:
 make lint
 make test
 make paper
+make deploy
+make stop
 ```

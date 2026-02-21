@@ -2,7 +2,7 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(VENV)/bin/pip
 
-.PHONY: setup test lint demo paper
+.PHONY: setup test lint demo paper deploy stop
 
 setup:
 	python3 -m venv $(VENV)
@@ -37,3 +37,9 @@ demo:
 
 paper:
 	$(MAKE) -C paper paper
+
+deploy:
+	./scripts/deploy_local.sh
+
+stop:
+	./scripts/stop_local.sh
