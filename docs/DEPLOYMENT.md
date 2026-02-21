@@ -1,31 +1,41 @@
 # Deployment
 
-## Fly.io
+## Local Production Mode
 
-This repo supports one-command Fly deployment for both API and web services.
-
-```bash
-make deploy-fly
-```
-
-Default app names:
-- API: `worldmodel-gym-api-biru`
-- Web: `worldmodel-gym-web-biru`
-
-Override names/region if needed:
+Run API + web on your machine:
 
 ```bash
-API_APP=my-api-name WEB_APP=my-web-name REGION=iad make deploy-fly
+make deploy
 ```
 
-What the script does:
-- creates Fly apps if missing
-- creates a persistent volume (`data`) for API sqlite storage
-- sets a random `WMG_UPLOAD_TOKEN` secret on API app
-- deploys API using `docker/server.Dockerfile`
-- deploys web using `docker/web.fly.Dockerfile`
+Stop local services:
 
-After deploy, it prints:
-- API URL
-- Web URL
-- upload token (store securely)
+```bash
+make stop
+```
+
+## Public No-Card Deployment (Quick Tunnel)
+
+This mode does not require Fly.io, cloud billing, or credit card setup.
+It runs services locally and exposes temporary public URLs through `localtunnel`.
+
+```bash
+make deploy-public
+```
+
+The command will:
+- start API (`uvicorn`) on `127.0.0.1:8000`
+- create a public API tunnel URL
+- build web with `NEXT_PUBLIC_API_BASE=<public-api-url>`
+- start web on `127.0.0.1:3000`
+- create a public web tunnel URL
+
+Stop public deployment:
+
+```bash
+make stop-public
+```
+
+Notes:
+- Public tunnel URLs are ephemeral and change when restarted.
+- Keep your machine running while the public URLs are in use.

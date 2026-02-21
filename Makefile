@@ -2,7 +2,7 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(VENV)/bin/pip
 
-.PHONY: setup test lint demo paper deploy stop deploy-fly
+.PHONY: setup test lint demo paper deploy stop deploy-public stop-public
 
 setup:
 	python3 -m venv $(VENV)
@@ -44,5 +44,8 @@ deploy:
 stop:
 	./scripts/stop_local.sh
 
-deploy-fly:
-	./scripts/deploy_fly.sh
+deploy-public:
+	./scripts/deploy_public.sh
+
+stop-public:
+	./scripts/stop_public.sh
