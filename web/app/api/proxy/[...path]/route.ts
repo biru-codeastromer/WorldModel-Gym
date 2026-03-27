@@ -9,7 +9,8 @@ type RouteContext = {
 };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const upstreamPath = params.path.join("/");
+  const normalizedPath = params.path[0] === "api" ? params.path.slice(1) : params.path;
+  const upstreamPath = normalizedPath.join("/");
   const upstreamUrl = new URL(`${API_BASE}/api/${upstreamPath}`);
   upstreamUrl.search = request.nextUrl.search;
 
