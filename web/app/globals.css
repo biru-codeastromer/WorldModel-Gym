@@ -3,17 +3,57 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f4f7ff;
+  --bg: #eef4ff;
   --fg: #11223a;
   --muted: #5f6c84;
+  --panel: rgba(255, 255, 255, 0.82);
+  --stroke: rgba(17, 34, 58, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
   color: var(--fg);
   background:
-    radial-gradient(circle at 8% 12%, rgba(255, 122, 61, 0.22), transparent 42%),
-    radial-gradient(circle at 92% 18%, rgba(102, 217, 186, 0.22), transparent 38%),
-    linear-gradient(180deg, #f5f8ff 0%, #e9f0ff 100%);
+    radial-gradient(circle at top left, rgba(255, 122, 61, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(102, 217, 186, 0.22), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(229, 239, 255, 0.25)),
+    linear-gradient(180deg, #f7faff 0%, #e7eefc 100%);
   min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(17, 34, 58, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 34, 58, 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 88%);
+}
+
+::selection {
+  background: rgba(255, 122, 61, 0.22);
+}
+
+.glass-panel {
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--stroke);
+}
+
+.grid-accent {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)),
+    linear-gradient(135deg, rgba(255, 122, 61, 0.08), rgba(102, 217, 186, 0.08));
 }

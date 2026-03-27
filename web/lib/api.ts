@@ -16,28 +16,58 @@ export type LeaderboardRow = {
   created_at: string;
 };
 
-export async function fetchTasks() {
-  const res = await fetch(`${getApiBase()}/api/tasks`, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error("failed to fetch tasks");
+export type TaskRecord = {
+  id: string;
+  description: string;
+  defaults?: Record<string, unknown>;
+};
+
+export type RunResponse = {
+  id: string;
+  env: string;
+  agent: string;
+  track: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  metrics: Record<string, any>;
+  trace_url?: string | null;
+  config_url?: string | null;
+};
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(`${getApiBase()}${path}`, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      throw new Error(`Request failed (${res.status})`);
+    }
+    return (await res.json()) as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request timed out while contacting the API");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json();
+}
+
+export async function fetchTasks() {
+  return fetchJson<{ tasks: TaskRecord[] }>("/api/tasks");
 }
 
 export async function fetchLeaderboard(track: string) {
-  const res = await fetch(`${getApiBase()}/api/leaderboard?track=${track}`, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error("failed to fetch leaderboard");
-  }
-  return (await res.json()) as LeaderboardRow[];
+  return fetchJson<LeaderboardRow[]>(`/api/leaderboard?track=${track}`);
 }
 
 export async function fetchRun(runId: string) {
-  const res = await fetch(`${getApiBase()}/api/runs/${runId}`, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error("failed to fetch run");
-  }
-  return res.json();
+  return fetchJson<RunResponse>(`/api/runs/${runId}`);
 }
 
 export async function fetchTrace(runId: string) {
