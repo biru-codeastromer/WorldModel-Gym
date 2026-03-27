@@ -1,4 +1,9 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export function getApiBase() {
+  if (typeof window === "undefined") {
+    return process.env.INTERNAL_API_BASE ?? process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+  }
+  return process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+}
 
 export type LeaderboardRow = {
   run_id: string;
@@ -12,7 +17,7 @@ export type LeaderboardRow = {
 };
 
 export async function fetchTasks() {
-  const res = await fetch(`${API_BASE}/api/tasks`, { cache: "no-store" });
+  const res = await fetch(`${getApiBase()}/api/tasks`, { cache: "no-store" });
   if (!res.ok) {
     throw new Error("failed to fetch tasks");
   }
@@ -20,7 +25,7 @@ export async function fetchTasks() {
 }
 
 export async function fetchLeaderboard(track: string) {
-  const res = await fetch(`${API_BASE}/api/leaderboard?track=${track}`, { cache: "no-store" });
+  const res = await fetch(`${getApiBase()}/api/leaderboard?track=${track}`, { cache: "no-store" });
   if (!res.ok) {
     throw new Error("failed to fetch leaderboard");
   }
@@ -28,7 +33,7 @@ export async function fetchLeaderboard(track: string) {
 }
 
 export async function fetchRun(runId: string) {
-  const res = await fetch(`${API_BASE}/api/runs/${runId}`, { cache: "no-store" });
+  const res = await fetch(`${getApiBase()}/api/runs/${runId}`, { cache: "no-store" });
   if (!res.ok) {
     throw new Error("failed to fetch run");
   }
@@ -36,7 +41,7 @@ export async function fetchRun(runId: string) {
 }
 
 export async function fetchTrace(runId: string) {
-  const res = await fetch(`${API_BASE}/api/runs/${runId}/trace`, { cache: "no-store" });
+  const res = await fetch(`${getApiBase()}/api/runs/${runId}/trace`, { cache: "no-store" });
   if (!res.ok) {
     throw new Error("failed to fetch trace");
   }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from pathlib import Path
@@ -8,8 +9,8 @@ import httpx
 from worldmodel_agents.registry import create_agent
 from worldmodel_gym.eval.harness import evaluate_and_write
 
-API = "http://localhost:8000"
-TOKEN = "dev-token"
+API = os.getenv("WMG_API_BASE", "http://localhost:8000")
+TOKEN = os.getenv("WMG_UPLOAD_TOKEN", "dev-token")
 
 
 def wait_for_server(timeout_s: int = 60) -> None:

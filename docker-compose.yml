@@ -21,6 +21,7 @@ services:
     container_name: wmg-web
     environment:
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      - INTERNAL_API_BASE=http://server:8000
     depends_on:
       - server
     ports:

@@ -8,6 +8,8 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
+      - key: WMG_ENV
+        value: production
       - key: WMG_DB_URL
         value: sqlite:////tmp/worldmodel_gym.db
       - key: WMG_STORAGE_DIR

@@ -1,5 +1,7 @@
 # Deployment
 
+Before deploying, copy `.env.example` and replace the default upload token.
+
 ## Recommended Free Cloud Combo: Render (API) + Vercel (Web)
 
 This project supports a fully free setup for hobby usage:
@@ -16,6 +18,7 @@ This project supports a fully free setup for hobby usage:
 Notes:
 - Render free web services can spin down when idle.
 - This repo uses sqlite in `/tmp` on Render free tier (ephemeral storage).
+- Use `WMG_ENV=production` for hosted API deployments so startup fails if `WMG_UPLOAD_TOKEN` is left at the insecure default.
 
 ### 2) Deploy Web on Vercel
 
@@ -23,6 +26,7 @@ Notes:
 2. Set **Root Directory** to `web`.
 3. Add environment variable:
    - `NEXT_PUBLIC_API_BASE=https://<your-render-api-url>`
+   - `INTERNAL_API_BASE=https://<your-render-api-url>` (optional but useful for server-rendered fetches)
 4. Deploy.
 
 Optional CLI deploy:
@@ -63,6 +67,11 @@ make stop-public
 Notes:
 - URLs are ephemeral and change when restarted.
 - Keep your machine running while URLs are in use.
+
+## Health Checks
+
+- Liveness: `/healthz`
+- Readiness: `/readyz`
 
 ## References
 

@@ -5,6 +5,7 @@ WorldModel Gym is a reproducible long-horizon planning benchmark + evaluation pl
 ## Quickstart (30 seconds)
 
 ```bash
+cp .env.example .env
 make setup
 make demo
 ```
@@ -18,6 +19,28 @@ make demo
 Open:
 - [http://localhost:3000](http://localhost:3000) (web dashboard)
 - [http://localhost:8000/docs](http://localhost:8000/docs) (FastAPI docs)
+
+## Production-ready defaults
+
+- CI runs Ruff, pytest, and a Next.js production build on every PR via GitHub Actions.
+- The API validates `run_id` values before writing artifacts to disk, which blocks path traversal bugs.
+- Production mode requires a non-default upload token via `WMG_ENV=production`.
+- Docker images start the API and web dashboard in production mode rather than development mode.
+
+## Environment
+
+Copy `.env.example` and adjust values for your machine or deployment target:
+
+```bash
+cp .env.example .env
+```
+
+Important variables:
+- `WMG_ENV`: use `development` locally and `production` in hosted environments
+- `WMG_UPLOAD_TOKEN`: required for artifact uploads; must be changed in production
+- `WMG_CORS_ORIGINS`: comma-separated allowed web origins for the API
+- `NEXT_PUBLIC_API_BASE`: public URL for the FastAPI service consumed by the web app
+- `INTERNAL_API_BASE`: optional server-side API base for Docker or reverse-proxy setups
 
 ## Run a single evaluation
 
@@ -64,3 +87,10 @@ make deploy-vercel
 - API: deploy `render.yaml` on Render Blueprint (free web service).
 - Web: deploy `web/` on Vercel Hobby with `NEXT_PUBLIC_API_BASE` set to the Render API URL.
 - Full steps: `docs/DEPLOYMENT.md`.
+
+## Resume-friendly highlights
+
+- Reproducible benchmark platform for long-horizon planning and imagination-based agents
+- Monorepo spanning benchmark environments, planners, world models, FastAPI backend, Next.js dashboard, and Expo mobile client
+- Automated quality gates with linting, tests, and web production builds
+- Cloud-ready deployment path for Render + Vercel plus local Docker-based operation

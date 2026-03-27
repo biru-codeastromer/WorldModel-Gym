@@ -14,12 +14,18 @@ from worldmodel_server.config import settings
 from worldmodel_server.db import Base, engine, get_session
 from worldmodel_server.models import RunEntry
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
-from worldmodel_server.storage import ensure_storage_dirs, load_json, run_dir, save_upload_file
+from worldmodel_server.storage import (
+    ensure_storage_dirs,
+    load_json,
+    run_dir,
+    save_upload_file,
+    validate_run_id,
+)
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins or ["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,13 +34,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    settings.validate()
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
 
 
 @app.post("/api/runs", response_model=RunResponse)
 def create_run(payload: RunCreate, session: Session = Depends(get_session)):
-    run_id = payload.id or uuid.uuid4().hex[:12]
+    run_id = validate_run_id(payload.id) if payload.id else uuid.uuid4().hex[:12]
     existing = session.get(RunEntry, run_id)
     if existing:
         raise HTTPException(status_code=409, detail="run id already exists")
@@ -78,18 +85,18 @@ async def upload_run_artifacts(
     if not item:
         raise HTTPException(status_code=404, detail="run not found")
 
-    d = run_dir(run_id)
+    d = _resolve_run_dir(run_id)
 
     metrics_path = d / "metrics.json"
     trace_path = d / "trace.jsonl"
     config_path = d / "config.yaml"
 
     if metrics_file is not None:
-        save_upload_file(metrics_path, await metrics_file.read())
+        save_upload_file(metrics_path, await _read_upload_bytes(metrics_file))
     if trace_file is not None:
-        save_upload_file(trace_path, await trace_file.read())
+        save_upload_file(trace_path, await _read_upload_bytes(trace_file))
     if config_file is not None:
-        save_upload_file(config_path, await config_file.read())
+        save_upload_file(config_path, await _read_upload_bytes(config_file))
 
     if metrics_path.exists():
         item.metrics_json = metrics_path.read_text(encoding="utf-8")
@@ -166,7 +173,7 @@ def get_run(run_id: str, session: Session = Depends(get_session)):
 
 @app.get("/api/runs/{run_id}/trace")
 def get_trace(run_id: str):
-    path = run_dir(run_id) / "trace.jsonl"
+    path = _resolve_run_dir(run_id, create=False) / "trace.jsonl"
     if not path.exists():
         raise HTTPException(status_code=404, detail="trace not found")
     return FileResponse(path)
@@ -174,7 +181,7 @@ def get_trace(run_id: str):
 
 @app.get("/api/runs/{run_id}/metrics")
 def get_metrics(run_id: str):
-    path = run_dir(run_id) / "metrics.json"
+    path = _resolve_run_dir(run_id, create=False) / "metrics.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="metrics not found")
     return FileResponse(path)
@@ -182,7 +189,7 @@ def get_metrics(run_id: str):
 
 @app.get("/api/runs/{run_id}/config")
 def get_config(run_id: str):
-    path = run_dir(run_id) / "config.yaml"
+    path = _resolve_run_dir(run_id, create=False) / "config.yaml"
     if not path.exists():
         raise HTTPException(status_code=404, detail="config not found")
     return FileResponse(path)
@@ -191,6 +198,13 @@ def get_config(run_id: str):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+@app.get("/readyz")
+def readyz(session: Session = Depends(get_session)):
+    session.execute(select(1))
+    ensure_storage_dirs()
+    return {"ok": True, "storage_dir": str(settings.storage_dir.resolve())}
 
 
 @app.post("/api/runs/{run_id}/trigger")
@@ -210,6 +224,23 @@ def _parse_metrics(raw: str) -> dict:
         if p.exists():
             return load_json(p)
         return {}
+
+
+def _resolve_run_dir(run_id: str, create: bool = True) -> Path:
+    try:
+        return run_dir(run_id, create=create)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+async def _read_upload_bytes(upload: UploadFile) -> bytes:
+    data = await upload.read()
+    if len(data) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{upload.filename or 'upload'} exceeds {settings.max_upload_bytes} bytes",
+        )
+    return data
 
 
 def _to_response(item: RunEntry) -> RunResponse:
