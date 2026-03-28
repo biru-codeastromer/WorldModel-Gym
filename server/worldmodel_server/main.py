@@ -38,14 +38,32 @@ except ImportError:  # pragma: no cover
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    configure_logging()
-    settings.validate()
-    if settings.auto_migrate:
-        run_migrations()
-    ensure_storage_dirs()
-    if settings.seed_demo_data:
-        with SessionLocal() as session:
-            seed_demo_runs(session)
+    import sys
+    import traceback
+
+    try:
+        print(f"[lifespan] Starting up, db_url backend: {settings.db_url.split('@')[0].split('://')[0] if '@' in settings.db_url else settings.db_url[:30]}", flush=True)
+        configure_logging()
+        print("[lifespan] Logging configured", flush=True)
+        settings.validate()
+        print("[lifespan] Settings validated", flush=True)
+        if settings.auto_migrate:
+            print("[lifespan] Running migrations...", flush=True)
+            run_migrations()
+            print("[lifespan] Migrations complete", flush=True)
+        ensure_storage_dirs()
+        print("[lifespan] Storage dirs ensured", flush=True)
+        if settings.seed_demo_data:
+            print("[lifespan] Seeding demo data...", flush=True)
+            with SessionLocal() as session:
+                count = seed_demo_runs(session)
+                print(f"[lifespan] Seeded {count} demo runs", flush=True)
+        print("[lifespan] Startup complete", flush=True)
+    except Exception as exc:
+        print(f"[lifespan] FATAL startup error: {exc}", file=sys.stderr, flush=True)
+        print(f"[lifespan] FATAL startup error: {exc}", flush=True)
+        traceback.print_exc()
+        raise
     yield
 
 

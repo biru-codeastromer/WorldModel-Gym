@@ -23,7 +23,9 @@ def build_engine_kwargs(db_url: str) -> dict:
     return engine_kwargs
 
 
+print(f"[db] Creating engine for: {settings.db_url.split('://')[0]}://***@{settings.db_url.split('@')[-1] if '@' in settings.db_url else '(no-host)'}", flush=True)
 engine = create_engine(settings.db_url, **build_engine_kwargs(settings.db_url))
+print(f"[db] Engine created successfully, dialect: {engine.dialect.name}", flush=True)
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
