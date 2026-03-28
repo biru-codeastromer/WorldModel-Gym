@@ -1,6 +1,6 @@
 # Deployment
 
-Before deploying, copy `.env.example` and replace the default upload token.
+Before deploying, set environment variables directly in Render/Vercel or in your shell. Do not commit env files to the repository.
 
 ## Recommended Production Combo: Render (API) + Vercel (Web)
 

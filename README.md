@@ -19,10 +19,11 @@ WorldModel Gym is a production-ready benchmark platform for long-horizon plannin
 ## Quickstart
 
 ```bash
-cp .env.example .env
 make setup
 make demo
 ```
+
+Local development uses built-in defaults. If you need overrides, export environment variables in your shell instead of committing env files to the repo.
 
 `make demo` will:
 
