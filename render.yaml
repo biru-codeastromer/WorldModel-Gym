@@ -1,7 +1,3 @@
-databases:
-  - name: worldmodel-gym-db
-    plan: basic-256mb
-
 services:
   - type: web
     name: worldmodel-gym-api
@@ -14,10 +10,8 @@ services:
     envVars:
       - key: WMG_ENV
         value: production
-      - key: WMG_DB_URL
-        fromDatabase:
-          name: worldmodel-gym-db
-          property: connectionString
+      # WMG_DB_URL is set manually in the Render dashboard
+      # (contains credentials — not stored in git)
       - key: WMG_AUTO_MIGRATE
         value: "true"
       - key: WMG_STORAGE_DIR
@@ -28,5 +22,7 @@ services:
         value: "true"
       - key: WMG_CORS_ORIGINS
         value: https://world-model-gym.vercel.app
+      - key: WMG_LEGACY_UPLOAD_TOKEN_ENABLED
+        value: "false"
       - key: WMG_UPLOAD_TOKEN
         generateValue: true
