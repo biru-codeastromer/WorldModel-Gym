@@ -33,6 +33,9 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     engine_kwargs = build_engine_kwargs(settings.db_url)
     engine_kwargs["poolclass"] = pool.NullPool
+    # NullPool doesn't accept pool-sizing arguments
+    engine_kwargs.pop("pool_size", None)
+    engine_kwargs.pop("max_overflow", None)
     connectable = create_engine(settings.db_url, **engine_kwargs)
 
     with connectable.connect() as connection:
