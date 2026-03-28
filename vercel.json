@@ -1,0 +1,15 @@
+{
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://world-model-gym.vercel.app/",
+      "permanent": false
+    },
+    {
+      "source": "/(.*)",
+      "destination": "https://world-model-gym.vercel.app/$1",
+      "permanent": false
+    }
+  ]
+}
