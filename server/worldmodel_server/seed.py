@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from worldmodel_server.models import RunEntry
+from worldmodel_server.models import ApiKey, RunEntry
 from worldmodel_server.storage import save_run_artifact, storage_status
 
 DEMO_RUNS = [
@@ -126,3 +126,27 @@ def seed_demo_runs(session: Session, *, force: bool = False) -> int:
 
     session.commit()
     return created_count
+
+
+def bootstrap_api_key(session: Session) -> bool:
+    """Create a production API key from WMG_BOOTSTRAP_API_KEY if no keys exist yet.
+
+    Returns True if a new key was created, False otherwise.
+    """
+    from worldmodel_server.auth import create_api_key as _create_api_key
+    from worldmodel_server.config import settings
+
+    if not settings.bootstrap_api_key:
+        return False
+
+    existing = session.scalars(select(ApiKey.id).limit(1)).first()
+    if existing is not None:
+        return False
+
+    _create_api_key(
+        session,
+        name="prod-writer",
+        scopes=["admin", "runs:write"],
+        raw_key=settings.bootstrap_api_key,
+    )
+    return True

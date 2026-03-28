@@ -64,6 +64,7 @@ class Settings:
         self.seed_demo_data = _as_bool(os.getenv("WMG_SEED_DEMO_DATA"), False)
         self.log_json = _as_bool(os.getenv("WMG_LOG_JSON"), True)
         self.log_level = os.getenv("WMG_LOG_LEVEL", "INFO").upper()
+        self.bootstrap_api_key = os.getenv("WMG_BOOTSTRAP_API_KEY", "")
 
     @property
     def is_production(self) -> bool:

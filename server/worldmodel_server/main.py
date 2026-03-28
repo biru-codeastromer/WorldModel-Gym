@@ -19,7 +19,7 @@ from worldmodel_server.models import RunEntry
 from worldmodel_server.rate_limit import rate_limiter
 from worldmodel_server.request_logging import configure_logging, log_request_event
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
-from worldmodel_server.seed import seed_demo_runs
+from worldmodel_server.seed import bootstrap_api_key, seed_demo_runs
 from worldmodel_server.storage import (
     artifact_key,
     ensure_storage_dirs,
@@ -53,6 +53,9 @@ async def lifespan(_app: FastAPI):
             print("[lifespan] Migrations complete", flush=True)
         ensure_storage_dirs()
         print("[lifespan] Storage dirs ensured", flush=True)
+        with SessionLocal() as session:
+            if bootstrap_api_key(session):
+                print("[lifespan] Bootstrap API key created", flush=True)
         if settings.seed_demo_data:
             print("[lifespan] Seeding demo data...", flush=True)
             with SessionLocal() as session:
