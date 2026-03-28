@@ -54,8 +54,6 @@ jobs:
 
   web-e2e:
     runs-on: ubuntu-latest
-    env:
-      WMG_E2E_PYTHON: python
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +81,72 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
 
+      - name: Start API server
+        run: |
+          mkdir -p .tmp
+          WMG_DB_URL=sqlite:///./.tmp/e2e.db \
+          WMG_STORAGE_DIR=./.tmp/e2e-storage \
+          WMG_UPLOAD_TOKEN=e2e-token \
+          WMG_AUTO_MIGRATE=true \
+          WMG_ENABLE_METRICS=false \
+          WMG_SEED_DEMO_DATA=true \
+          python -m uvicorn worldmodel_server.main:app --host 127.0.0.1 --port 8100 > .tmp/e2e-api.log 2>&1 &
+          echo $! > .tmp/e2e-api.pid
+
+      - name: Start web server
+        run: |
+          mkdir -p .tmp
+          cd web
+          INTERNAL_API_BASE=http://127.0.0.1:8100 \
+          NEXT_PUBLIC_API_BASE=http://127.0.0.1:8100 \
+          npm run dev -- --hostname 127.0.0.1 --port 3100 > ../.tmp/e2e-web.log 2>&1 &
+          echo $! > ../.tmp/e2e-web.pid
+
+      - name: Wait for local services
+        run: |
+          python - <<'PY'
+          import sys
+          import time
+          from urllib.request import urlopen
+
+          targets = [
+              "http://127.0.0.1:8100/healthz",
+              "http://127.0.0.1:3100",
+          ]
+          deadline = time.time() + 120
+          pending = set(targets)
+
+          while pending and time.time() < deadline:
+              for target in list(pending):
+                  try:
+                      with urlopen(target, timeout=2) as response:
+                          if response.status < 500:
+                              pending.remove(target)
+                  except Exception:
+                      pass
+              if pending:
+                  time.sleep(2)
+
+          if pending:
+              raise SystemExit(f"Services did not start in time: {sorted(pending)}")
+          PY
+
       - name: Run Playwright smoke tests
         working-directory: web
+        env:
+          PLAYWRIGHT_DISABLE_WEBSERVER: "1"
         run: npm run test:e2e
+
+      - name: Dump server logs on failure
+        if: failure()
+        run: |
+          echo "===== API LOG ====="
+          cat .tmp/e2e-api.log || true
+          echo "===== WEB LOG ====="
+          cat .tmp/e2e-web.log || true
+
+      - name: Stop background services
+        if: always()
+        run: |
+          kill $(cat .tmp/e2e-api.pid) 2>/dev/null || true
+          kill $(cat .tmp/e2e-web.pid) 2>/dev/null || true
