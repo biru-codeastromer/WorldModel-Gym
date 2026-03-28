@@ -42,7 +42,10 @@ async def lifespan(_app: FastAPI):
     import traceback
 
     try:
-        print(f"[lifespan] Starting up, db_url backend: {settings.db_url.split('@')[0].split('://')[0] if '@' in settings.db_url else settings.db_url[:30]}", flush=True)
+        print(
+            f"[lifespan] Starting up, db_url backend: {settings.db_url.split('@')[0].split('://')[0] if '@' in settings.db_url else settings.db_url[:30]}",
+            flush=True,
+        )
         configure_logging()
         print("[lifespan] Logging configured", flush=True)
         settings.validate()
@@ -419,5 +422,3 @@ def _artifact_response(key: str, media_type: str, not_found_detail: str) -> Resp
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=not_found_detail) from exc
     return Response(content=payload, media_type=media_type)
-
-
