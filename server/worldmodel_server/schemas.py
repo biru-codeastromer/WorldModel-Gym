@@ -18,6 +18,8 @@ class RunResponse(BaseModel):
     agent: str
     track: str
     status: str
+    created_by: str | None = None
+    storage_backend: str | None = None
     created_at: datetime
     updated_at: datetime
     metrics: dict = Field(default_factory=dict)

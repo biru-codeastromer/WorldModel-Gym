@@ -1,28 +1,55 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
-from pathlib import Path
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from worldmodel_server.auth import AuthenticatedPrincipal, require_scope
 from worldmodel_server.config import settings
-from worldmodel_server.db import Base, engine, get_session
+from worldmodel_server.db import SessionLocal, get_session
+from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
+from worldmodel_server.rate_limit import rate_limiter
+from worldmodel_server.request_logging import configure_logging, log_request_event
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
+from worldmodel_server.seed import seed_demo_runs
 from worldmodel_server.storage import (
+    artifact_key,
     ensure_storage_dirs,
     load_json,
-    run_dir,
-    save_upload_file,
+    load_run_artifact,
+    save_run_artifact,
+    storage_status,
     validate_run_id,
 )
 
-app = FastAPI(title=settings.app_name)
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+except ImportError:  # pragma: no cover
+    Instrumentator = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    configure_logging()
+    settings.validate()
+    if settings.auto_migrate:
+        run_migrations()
+    ensure_storage_dirs()
+    if settings.seed_demo_data:
+        with SessionLocal() as session:
+            seed_demo_runs(session)
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins or ["*"],
@@ -32,15 +59,109 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def _startup() -> None:
-    settings.validate()
-    ensure_storage_dirs()
-    Base.metadata.create_all(bind=engine)
+if settings.enable_metrics and Instrumentator is not None:
+    Instrumentator(excluded_handlers=["/healthz", "/readyz"]).instrument(app).expose(
+        app,
+        include_in_schema=False,
+    )
+
+
+def _client_host(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _should_rate_limit_public_request(request: Request) -> bool:
+    if request.method not in {"GET", "HEAD"}:
+        return False
+    if not request.url.path.startswith("/api/"):
+        return False
+    if request.headers.get("authorization") or request.headers.get("x-api-key"):
+        return False
+    return True
+
+
+def _enforce_principal_rate_limit(request: Request, principal: AuthenticatedPrincipal) -> None:
+    client_host = _client_host(request)
+    result = rate_limiter.hit(
+        f"write:{principal.identifier}:{client_host}",
+        principal.rate_limit_per_minute,
+    )
+    if not result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="authenticated write rate limit exceeded",
+            headers={"Retry-After": str(result.retry_after)},
+        )
+
+
+def _require_write_access(
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(require_scope("runs:write")),
+) -> AuthenticatedPrincipal:
+    _enforce_principal_rate_limit(request, principal)
+    return principal
+
+
+def _require_admin_access(
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(require_scope("admin")),
+) -> AuthenticatedPrincipal:
+    _enforce_principal_rate_limit(request, principal)
+    return principal
+
+
+@app.middleware("http")
+async def access_log_and_public_rate_limit(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    request.state.request_id = request_id
+    started_at = time.perf_counter()
+
+    if _should_rate_limit_public_request(request):
+        client_host = _client_host(request)
+        result = rate_limiter.hit(
+            f"public-read:{client_host}",
+            settings.public_read_rate_limit_per_minute,
+        )
+        if not result.allowed:
+            response = JSONResponse(
+                {"detail": "public API rate limit exceeded"},
+                status_code=429,
+                headers={"Retry-After": str(result.retry_after)},
+            )
+            response.headers["x-request-id"] = request_id
+            return response
+
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        log_request_event(
+            {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code if response else 500,
+                "duration_ms": duration_ms,
+                "client": _client_host(request),
+            }
+        )
+        if response is not None:
+            response.headers.setdefault("x-request-id", request_id)
 
 
 @app.post("/api/runs", response_model=RunResponse)
-def create_run(payload: RunCreate, session: Session = Depends(get_session)):
+def create_run(
+    payload: RunCreate,
+    session: Session = Depends(get_session),
+    principal: AuthenticatedPrincipal = Depends(_require_write_access),
+):
     run_id = validate_run_id(payload.id) if payload.id else uuid.uuid4().hex[:12]
     existing = session.get(RunEntry, run_id)
     if existing:
@@ -52,6 +173,7 @@ def create_run(payload: RunCreate, session: Session = Depends(get_session)):
         agent=payload.agent,
         track=payload.track,
         status="created",
+        created_by=principal.identifier,
     )
     session.add(item)
     session.commit()
@@ -63,6 +185,8 @@ def create_run(payload: RunCreate, session: Session = Depends(get_session)):
         agent=item.agent,
         track=item.track,
         status=item.status,
+        created_by=item.created_by,
+        storage_backend=item.storage_backend,
         created_at=item.created_at,
         updated_at=item.updated_at,
         metrics={},
@@ -75,34 +199,29 @@ async def upload_run_artifacts(
     metrics_file: UploadFile | None = File(default=None),
     trace_file: UploadFile | None = File(default=None),
     config_file: UploadFile | None = File(default=None),
-    x_upload_token: str | None = Header(default=None),
     session: Session = Depends(get_session),
+    principal: AuthenticatedPrincipal = Depends(_require_write_access),
 ):
-    if x_upload_token != settings.upload_token:
-        raise HTTPException(status_code=401, detail="invalid upload token")
-
-    item = session.get(RunEntry, run_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="run not found")
-
-    d = _resolve_run_dir(run_id)
-
-    metrics_path = d / "metrics.json"
-    trace_path = d / "trace.jsonl"
-    config_path = d / "config.yaml"
+    item = _get_run_or_404(session, run_id)
+    metrics_bytes: bytes | None = None
 
     if metrics_file is not None:
-        save_upload_file(metrics_path, await _read_upload_bytes(metrics_file))
+        metrics_bytes = await _read_upload_bytes(metrics_file)
+        save_run_artifact(run_id, "metrics.json", metrics_bytes)
     if trace_file is not None:
-        save_upload_file(trace_path, await _read_upload_bytes(trace_file))
+        item.trace_path = save_run_artifact(
+            run_id, "trace.jsonl", await _read_upload_bytes(trace_file)
+        )
     if config_file is not None:
-        save_upload_file(config_path, await _read_upload_bytes(config_file))
+        item.config_path = save_run_artifact(
+            run_id, "config.yaml", await _read_upload_bytes(config_file)
+        )
 
-    if metrics_path.exists():
-        item.metrics_json = metrics_path.read_text(encoding="utf-8")
-    item.trace_path = str(trace_path)
-    item.config_path = str(config_path)
+    if metrics_bytes is not None:
+        item.metrics_json = json.dumps(_parse_metrics_from_bytes(metrics_bytes))
     item.status = "uploaded"
+    item.storage_backend = storage_status()["backend"]
+    item.created_by = principal.identifier
 
     session.add(item)
     session.commit()
@@ -165,50 +284,50 @@ def tasks():
 
 @app.get("/api/runs/{run_id}", response_model=RunResponse)
 def get_run(run_id: str, session: Session = Depends(get_session)):
-    item = session.get(RunEntry, run_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="run not found")
-    return _to_response(item)
+    return _to_response(_get_run_or_404(session, run_id))
 
 
 @app.get("/api/runs/{run_id}/trace")
-def get_trace(run_id: str):
-    path = _resolve_run_dir(run_id, create=False) / "trace.jsonl"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="trace not found")
-    return FileResponse(path)
+def get_trace(run_id: str, session: Session = Depends(get_session)):
+    item = _get_run_or_404(session, run_id)
+    key = item.trace_path or artifact_key(item.id, "trace.jsonl")
+    return _artifact_response(key, "application/x-ndjson", "trace not found")
 
 
 @app.get("/api/runs/{run_id}/metrics")
-def get_metrics(run_id: str):
-    path = _resolve_run_dir(run_id, create=False) / "metrics.json"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="metrics not found")
-    return FileResponse(path)
+def get_metrics(run_id: str, session: Session = Depends(get_session)):
+    item = _get_run_or_404(session, run_id)
+    key = artifact_key(item.id, "metrics.json")
+    try:
+        return _artifact_response(key, "application/json", "metrics not found")
+    except HTTPException:
+        return JSONResponse(_parse_metrics(item.metrics_json))
 
 
 @app.get("/api/runs/{run_id}/config")
-def get_config(run_id: str):
-    path = _resolve_run_dir(run_id, create=False) / "config.yaml"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="config not found")
-    return FileResponse(path)
+def get_config(run_id: str, session: Session = Depends(get_session)):
+    item = _get_run_or_404(session, run_id)
+    key = item.config_path or artifact_key(item.id, "config.yaml")
+    return _artifact_response(key, "text/yaml; charset=utf-8", "config not found")
 
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True}
+    return {"ok": True, "environment": settings.environment}
 
 
 @app.get("/readyz")
 def readyz(session: Session = Depends(get_session)):
     session.execute(select(1))
     ensure_storage_dirs()
-    return {"ok": True, "storage_dir": str(settings.storage_dir.resolve())}
+    return {"ok": True, "storage": storage_status()}
 
 
 @app.post("/api/runs/{run_id}/trigger")
-def trigger_demo_run(run_id: str):
+def trigger_demo_run(
+    run_id: str,
+    _principal: AuthenticatedPrincipal = Depends(_require_admin_access),
+):
     return {
         "status": "accepted",
         "run_id": run_id,
@@ -220,17 +339,27 @@ def _parse_metrics(raw: str) -> dict:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        p = Path(raw)
-        if p.exists():
-            return load_json(p)
+        if raw:
+            return load_json(raw)
         return {}
 
 
-def _resolve_run_dir(run_id: str, create: bool = True) -> Path:
+def _parse_metrics_from_bytes(data: bytes) -> dict:
     try:
-        return run_dir(run_id, create=create)
+        return json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+
+
+def _get_run_or_404(session: Session, run_id: str) -> RunEntry:
+    try:
+        safe_run_id = validate_run_id(run_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    item = session.get(RunEntry, safe_run_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="run not found")
+    return item
 
 
 async def _read_upload_bytes(upload: UploadFile) -> bytes:
@@ -253,9 +382,68 @@ def _to_response(item: RunEntry) -> RunResponse:
         agent=item.agent,
         track=item.track,
         status=item.status,
+        created_by=item.created_by,
+        storage_backend=item.storage_backend,
         created_at=item.created_at,
         updated_at=item.updated_at,
         metrics=metrics,
         trace_url=trace_url,
         config_url=config_url,
     )
+
+
+def _artifact_response(key: str, media_type: str, not_found_detail: str) -> Response:
+    try:
+        payload = load_run_artifact(key)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=not_found_detail) from exc
+    return Response(content=payload, media_type=media_type)
+
+
+def _client_host(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _should_rate_limit_public_request(request: Request) -> bool:
+    if request.method not in {"GET", "HEAD"}:
+        return False
+    if not request.url.path.startswith("/api/"):
+        return False
+    if request.headers.get("authorization") or request.headers.get("x-api-key"):
+        return False
+    return True
+
+
+def _require_write_access(
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(require_scope("runs:write")),
+) -> AuthenticatedPrincipal:
+    _enforce_principal_rate_limit(request, principal)
+    return principal
+
+
+def _require_admin_access(
+    request: Request,
+    principal: AuthenticatedPrincipal = Depends(require_scope("admin")),
+) -> AuthenticatedPrincipal:
+    _enforce_principal_rate_limit(request, principal)
+    return principal
+
+
+def _enforce_principal_rate_limit(request: Request, principal: AuthenticatedPrincipal) -> None:
+    client_host = _client_host(request)
+    result = rate_limiter.hit(
+        f"write:{principal.identifier}:{client_host}",
+        principal.rate_limit_per_minute,
+    )
+    if not result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="authenticated write rate limit exceeded",
+            headers={"Retry-After": str(result.retry_after)},
+        )

@@ -5,6 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY alembic.ini /app/alembic.ini
 COPY core /app/core
 COPY planners /app/planners
 COPY worldmodels /app/worldmodels

@@ -9,8 +9,38 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
 
 export const metadata: Metadata = {
-  title: "WorldModel Gym",
-  description: "Long-horizon planning benchmark for imagination-based agents"
+  metadataBase: new URL("https://world-model-gym.vercel.app"),
+  title: {
+    default: "WorldModel Gym",
+    template: "%s | WorldModel Gym"
+  },
+  description:
+    "Production-ready benchmark and leaderboard for long-horizon planning agents under sparse rewards and partial observability.",
+  keywords: [
+    "world models",
+    "planning benchmark",
+    "reinforcement learning",
+    "FastAPI",
+    "Next.js",
+    "leaderboard"
+  ],
+  openGraph: {
+    title: "WorldModel Gym",
+    description:
+      "Evaluate imagination-based agents with reproducible benchmark tracks, planner traces, and a public leaderboard.",
+    url: "https://world-model-gym.vercel.app",
+    siteName: "WorldModel Gym",
+    type: "website"
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "WorldModel Gym",
+    description:
+      "Benchmark long-horizon planning agents with reproducible tracks, trace uploads, and a public dashboard."
+  },
+  alternates: {
+    canonical: "/"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

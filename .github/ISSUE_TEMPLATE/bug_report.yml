@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a bug in the benchmark platform, API, or web app.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include commands, pages, or API calls that reproduce the issue.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Example: macOS + Docker, Render production, Vercel preview.
+      placeholder: macOS 15 / Docker Desktop / Chrome 135
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Paste stack traces, request IDs, or attach screenshots if helpful.

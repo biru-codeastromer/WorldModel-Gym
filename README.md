@@ -1,8 +1,22 @@
 # worldmodel-gym
 
-WorldModel Gym is a reproducible long-horizon planning benchmark + evaluation platform for imagination-based agents.
+WorldModel Gym is a production-ready benchmark platform for long-horizon planning agents. It combines reproducible environments, planner/world-model baselines, a FastAPI submission service, and a Next.js leaderboard dashboard into one deployable monorepo.
 
-## Quickstart (30 seconds)
+## Screenshots
+
+![Homepage dashboard](docs/images/homepage.png)
+
+![Leaderboard dashboard](docs/images/leaderboard.png)
+
+## What makes this repo strong
+
+- Reproducible benchmark tasks for sparse rewards, partial observability, and procedural generalization
+- FastAPI backend with Alembic migrations, scoped API keys, rate limiting, readiness checks, and structured logging
+- Pluggable artifact storage with local and S3-compatible backends
+- Next.js dashboard with proxy-based API access, seeded demo data support, metadata/SEO, and Playwright smoke tests
+- CI coverage for Ruff, pytest, Next.js production builds, and browser E2E verification
+
+## Quickstart
 
 ```bash
 cp .env.example .env
@@ -11,70 +25,123 @@ make demo
 ```
 
 `make demo` will:
+
 - start the API + web stack with Docker when available
-- fall back to local API execution when Docker daemon is unavailable
-- run one benchmark evaluation
-- upload artifacts and populate leaderboard data
+- fall back to local API execution when Docker is unavailable
+- create a benchmark run
+- upload artifacts through the API
+- populate the leaderboard
 
 Open:
-- [http://localhost:3000](http://localhost:3000) (web dashboard)
-- [http://localhost:8000/docs](http://localhost:8000/docs) (FastAPI docs)
 
-## Production-ready defaults
+- [http://localhost:3000](http://localhost:3000)
+- [http://localhost:8000/docs](http://localhost:8000/docs)
 
-- CI runs Ruff, pytest, and a Next.js production build on every PR via GitHub Actions.
-- The API validates `run_id` values before writing artifacts to disk, which blocks path traversal bugs.
-- Production mode requires a non-default upload token via `WMG_ENV=production`.
-- Docker images start the API and web dashboard in production mode rather than development mode.
+## Architecture
 
-## Environment
+```mermaid
+flowchart LR
+    subgraph Benchmark
+      E["Environments"]
+      A["Agents"]
+      P["Planners"]
+      W["World Models"]
+      H["Evaluation Harness"]
+    end
 
-Copy `.env.example` and adjust values for your machine or deployment target:
+    subgraph Platform
+      API["FastAPI API"]
+      DB[("Postgres / SQLite")]
+      STORE[("Local or S3 Artifacts")]
+      WEB["Next.js Dashboard"]
+      PROXY["Next.js API Proxy"]
+      MOB["Expo Mobile"]
+    end
 
-```bash
-cp .env.example .env
+    A --> E
+    A --> P
+    A --> W
+    P --> W
+    H --> A
+    H --> E
+    H --> API
+    API --> DB
+    API --> STORE
+    WEB --> PROXY
+    PROXY --> API
+    MOB --> API
 ```
 
-Important variables:
-- `WMG_ENV`: use `development` locally and `production` in hosted environments
-- `WMG_UPLOAD_TOKEN`: required for artifact uploads; must be changed in production
-- `WMG_CORS_ORIGINS`: comma-separated allowed web origins for the API
-- `NEXT_PUBLIC_API_BASE`: public URL for the FastAPI service consumed by the web app
-- `INTERNAL_API_BASE`: optional server-side API base for Docker or reverse-proxy setups
+## Production Features
 
-## Run a single evaluation
+- Alembic migrations replace implicit `create_all()` table creation
+- API writes are protected by scoped API keys with a legacy upload-token compatibility path
+- Public API traffic is rate limited and logged with request IDs
+- Prometheus metrics are exposed from the server at `/metrics`
+- Browser clients use the Next.js proxy route instead of direct cross-origin calls to the API
+- Demo leaderboard data can be seeded with `WMG_SEED_DEMO_DATA=true`
 
-```bash
-.venv/bin/python -m worldmodel_gym.eval.run \
-  --agent random \
-  --env memory_maze \
-  --track test \
-  --seeds 211,223 \
-  --max-episodes 2
+## Deployment Topology
+
+```mermaid
+flowchart LR
+    GH["GitHub"]
+    CI["GitHub Actions"]
+    V["Vercel Web"]
+    R["Render API"]
+    PG[("Render Postgres")]
+    S3[("S3-Compatible Bucket")]
+
+    GH --> CI
+    GH --> V
+    GH --> R
+    R --> PG
+    R --> S3
+    V --> R
 ```
 
-Artifacts are written to `runs/<run_id>/`:
-- `metrics.json`
-- `trace.jsonl`
-- `config.yaml`
+Full deployment instructions live in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Monorepo layout
+## Auth and Operations
 
-- `core/`: environments, traces, eval harness
-- `planners/`: MCTS, MPC-CEM, trajectory sampling
-- `worldmodels/`: deterministic/stochastic/ensemble latent models
+Create a scoped API key:
+
+```bash
+.venv/bin/python -m worldmodel_server.cli create-api-key \
+  --name production-writer \
+  --scope runs:write
+```
+
+Seed demo data:
+
+```bash
+.venv/bin/python -m worldmodel_server.cli seed-demo-data --force
+```
+
+Operational runbook:
+
+- [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- [SECURITY.md](SECURITY.md)
+
+## Monorepo Layout
+
+- `core/`: environments, traces, evaluation harness
+- `planners/`: MCTS, MPC-CEM, and trajectory-sampling planners
+- `worldmodels/`: deterministic, stochastic, and ensemble world models
 - `agents/`: baseline agents and registry
-- `server/`: FastAPI leaderboard + run artifact service
-- `web/`: Next.js dashboard
-- `mobile/`: Expo viewer
-- `paper/`: draft PDF + LaTeX sources
+- `server/`: FastAPI API, auth, migrations, storage, and seeding
+- `web/`: Next.js dashboard and proxy routes
+- `mobile/`: Expo mobile viewer
+- `paper/`: manuscript sources and generated PDF
 
-## Dev targets
+## Developer Commands
 
 ```bash
 make lint
 make test
-make paper
+make demo
+make seed-demo
+make create-api-key NAME=local-writer SCOPE=runs:write
 make deploy
 make stop
 make deploy-public
@@ -82,15 +149,12 @@ make stop-public
 make deploy-vercel
 ```
 
-## Free Cloud Deploy
+## Resume-Friendly Highlights
 
-- API: deploy `render.yaml` on Render Blueprint (free web service).
-- Web: deploy `web/` on Vercel Hobby with `NEXT_PUBLIC_API_BASE` set to the Render API URL.
-- Full steps: `docs/DEPLOYMENT.md`.
+- Shipped an end-to-end benchmark platform spanning environments, planners, model baselines, backend APIs, and frontend dashboards
+- Hardened the service with migrations, auth, rate limiting, structured logging, and cloud deployment support
+- Added automated browser verification and production smoke checks on top of standard lint/test/build CI
 
-## Resume-friendly highlights
+## License
 
-- Reproducible benchmark platform for long-horizon planning and imagination-based agents
-- Monorepo spanning benchmark environments, planners, world models, FastAPI backend, Next.js dashboard, and Expo mobile client
-- Automated quality gates with linting, tests, and web production builds
-- Cloud-ready deployment path for Render + Vercel plus local Docker-based operation
+[MIT](LICENSE)

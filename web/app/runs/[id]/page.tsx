@@ -6,6 +6,21 @@ import { useParams } from "next/navigation";
 
 import { fetchRun, fetchTrace } from "@/lib/api";
 
+function normalizeEpisodes(trace: any[]) {
+  if (trace.every((entry) => Array.isArray(entry?.steps))) {
+    return trace;
+  }
+  return [
+    {
+      steps: trace.map((step: any, index) => ({
+        ...step,
+        t: step?.t ?? step?.step ?? index,
+        events: Array.isArray(step?.events) ? step.events : []
+      }))
+    }
+  ];
+}
+
 function extractEvents(trace: any[]) {
   const events: { t: number; name: string }[] = [];
   trace.forEach((episode) => {
@@ -23,9 +38,9 @@ export default function RunViewerPage() {
   const runQuery = useQuery({ queryKey: ["run", runId], queryFn: () => fetchRun(runId) });
   const traceQuery = useQuery({ queryKey: ["trace", runId], queryFn: () => fetchTrace(runId) });
 
-  const events = useMemo(() => extractEvents(traceQuery.data ?? []), [traceQuery.data]);
+  const episodes = useMemo(() => normalizeEpisodes(traceQuery.data ?? []), [traceQuery.data]);
+  const events = useMemo(() => extractEvents(episodes), [episodes]);
   const firstPlanner = useMemo(() => {
-    const episodes = traceQuery.data ?? [];
     for (const ep of episodes) {
       for (const step of ep.steps ?? []) {
         if (step.planner && Object.keys(step.planner).length > 0) {
@@ -34,7 +49,7 @@ export default function RunViewerPage() {
       }
     }
     return null;
-  }, [traceQuery.data]);
+  }, [episodes]);
 
   if (runQuery.isLoading || traceQuery.isLoading) {
     return <div className="glass-panel rounded-[28px] p-6 shadow-card">Loading run viewer...</div>;
@@ -50,7 +65,7 @@ export default function RunViewerPage() {
 
   const run = runQuery.data;
   const metrics = run?.metrics ?? {};
-  const traceLines = traceQuery.data ?? [];
+  const traceLines = episodes;
 
   return (
     <section className="space-y-5">

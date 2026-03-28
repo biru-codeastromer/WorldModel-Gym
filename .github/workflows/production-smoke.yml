@@ -1,0 +1,22 @@
+name: Production Smoke
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      WEB_URL: https://world-model-gym.vercel.app
+      API_URL: https://worldmodel-gym-api.onrender.com
+    steps:
+      - name: Check homepage
+        run: curl --fail --silent --show-error "$WEB_URL" > /dev/null
+
+      - name: Check leaderboard proxy
+        run: curl --fail --silent --show-error "$WEB_URL/api/proxy/api/leaderboard?track=test" > /dev/null
+
+      - name: Check API health
+        run: curl --fail --silent --show-error "$API_URL/healthz" > /dev/null

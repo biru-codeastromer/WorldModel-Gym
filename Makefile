@@ -2,7 +2,7 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(VENV)/bin/pip
 
-.PHONY: setup test lint demo paper deploy stop deploy-public stop-public deploy-vercel
+.PHONY: setup test lint demo paper deploy stop deploy-public stop-public deploy-vercel seed-demo create-api-key
 
 setup:
 	python3 -m venv $(VENV)
@@ -52,3 +52,9 @@ stop-public:
 
 deploy-vercel:
 	./scripts/deploy_vercel.sh
+
+seed-demo:
+	$(PYTHON) -m worldmodel_server.cli seed-demo-data --force
+
+create-api-key:
+	$(PYTHON) -m worldmodel_server.cli create-api-key --name "$${NAME:-local-writer}" --scope "$${SCOPE:-runs:write}"

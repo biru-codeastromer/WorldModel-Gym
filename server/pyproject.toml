@@ -7,12 +7,19 @@ name = "worldmodel-gym-server"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+  "alembic>=1.16.0",
+  "boto3>=1.37.0",
   "fastapi>=0.115.6",
+  "psycopg[binary]>=3.2.6",
+  "prometheus-fastapi-instrumentator>=7.1.0",
   "uvicorn>=0.34.0",
   "sqlalchemy>=2.0.36",
   "pydantic>=2.10.3",
   "python-multipart>=0.0.20",
 ]
+
+[project.scripts]
+worldmodel-server-admin = "worldmodel_server.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

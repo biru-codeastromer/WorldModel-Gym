@@ -11,6 +11,13 @@ from worldmodel_gym.eval.harness import evaluate_and_write
 
 API = os.getenv("WMG_API_BASE", "http://localhost:8000")
 TOKEN = os.getenv("WMG_UPLOAD_TOKEN", "dev-token")
+API_KEY = os.getenv("WMG_API_KEY")
+
+
+def auth_headers() -> dict[str, str]:
+    if API_KEY:
+        return {"x-api-key": API_KEY}
+    return {"x-upload-token": TOKEN}
 
 
 def wait_for_server(timeout_s: int = 60) -> None:
@@ -35,6 +42,7 @@ def main() -> None:
         create = client.post(
             f"{API}/api/runs",
             json={"id": run_id, "env": "memory_maze", "agent": "random", "track": "test"},
+            headers=auth_headers(),
         )
         create.raise_for_status()
 
@@ -64,7 +72,7 @@ def main() -> None:
         upload = client.post(
             f"{API}/api/runs/{run_id}/upload",
             files=files,
-            headers={"x-upload-token": TOKEN},
+            headers=auth_headers(),
         )
         upload.raise_for_status()
 

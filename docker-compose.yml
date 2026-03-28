@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wmg-postgres
+    environment:
+      - POSTGRES_DB=worldmodel_gym
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
   server:
     build:
       context: .
@@ -6,11 +18,15 @@ services:
     container_name: wmg-server
     environment:
       - WMG_UPLOAD_TOKEN=dev-token
-      - WMG_DB_URL=sqlite:////app/server/storage/worldmodel_gym.db
+      - WMG_DB_URL=postgresql+psycopg://postgres:postgres@postgres:5432/worldmodel_gym
+      - WMG_AUTO_MIGRATE=true
       - WMG_STORAGE_DIR=/app/server/storage
+      - WMG_ENABLE_METRICS=true
     volumes:
       - ./server/storage:/app/server/storage
       - ./runs:/app/runs
+    depends_on:
+      - postgres
     ports:
       - "8000:8000"
 
@@ -26,3 +42,6 @@ services:
       - server
     ports:
       - "3000:3000"
+
+volumes:
+  postgres-data:
