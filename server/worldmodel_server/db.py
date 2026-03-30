@@ -23,12 +23,24 @@ def build_engine_kwargs(db_url: str) -> dict:
     return engine_kwargs
 
 
-print(
-    f"[db] Creating engine for: {settings.db_url.split('://')[0]}://***@{settings.db_url.split('@')[-1] if '@' in settings.db_url else '(no-host)'}",
-    flush=True,
-)
+def describe_database(db_url: str | None = None) -> dict[str, str]:
+    url = make_url(db_url or settings.db_url)
+    backend = url.get_backend_name()
+    if backend == "sqlite":
+        return {
+            "backend": backend,
+            "location": url.database or ":memory:",
+        }
+
+    description = {"backend": backend}
+    if url.host:
+        description["host"] = url.host
+    if url.database:
+        description["database"] = url.database
+    return description
+
+
 engine = create_engine(settings.db_url, **build_engine_kwargs(settings.db_url))
-print(f"[db] Engine created successfully, dialect: {engine.dialect.name}", flush=True)
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,

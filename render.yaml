@@ -20,11 +20,15 @@ services:
         value: "true"
       - key: WMG_ENABLE_METRICS
         value: "true"
+      - key: WMG_LOG_JSON
+        value: "true"
+      - key: WMG_LOG_LEVEL
+        value: "INFO"
       - key: WMG_CORS_ORIGINS
         value: https://world-model-gym.vercel.app
       - key: WMG_LEGACY_UPLOAD_TOKEN_ENABLED
         value: "false"
-      - key: WMG_UPLOAD_TOKEN
-        generateValue: true
+      # Optional one-time bootstrap for the first admin/writer key.
+      # Remove after a durable production API key is in place.
       - key: WMG_BOOTSTRAP_API_KEY
         generateValue: true

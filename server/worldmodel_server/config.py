@@ -81,6 +81,8 @@ class Settings:
             and self.upload_token == "dev-token"
         ):
             raise RuntimeError("WMG_UPLOAD_TOKEN must be set to a non-default value in production")
+        if self.bootstrap_api_key and len(self.bootstrap_api_key) < 24:
+            raise RuntimeError("WMG_BOOTSTRAP_API_KEY must be at least 24 characters long")
 
 
 settings = Settings()

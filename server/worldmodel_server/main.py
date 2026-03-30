@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -11,15 +12,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from worldmodel_server.auth import AuthenticatedPrincipal, require_scope
+from worldmodel_server.auth import AuthenticatedPrincipal, ensure_bootstrap_api_key, require_scope
 from worldmodel_server.config import settings
-from worldmodel_server.db import SessionLocal, get_session
+from worldmodel_server.db import SessionLocal, describe_database, get_session
 from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
 from worldmodel_server.rate_limit import rate_limiter
-from worldmodel_server.request_logging import configure_logging, log_request_event
+from worldmodel_server.request_logging import configure_logging, log_request_event, log_system_event
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
-from worldmodel_server.seed import bootstrap_api_key, seed_demo_runs
+from worldmodel_server.seed import seed_demo_runs
 from worldmodel_server.storage import (
     artifact_key,
     ensure_storage_dirs,
@@ -38,37 +39,40 @@ except ImportError:  # pragma: no cover
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    import sys
-    import traceback
-
+    configure_logging()
+    startup_context = {
+        "environment": settings.environment,
+        "database": describe_database(),
+        "auto_migrate": settings.auto_migrate,
+        "seed_demo_data": settings.seed_demo_data,
+        "bootstrap_api_key_configured": bool(settings.bootstrap_api_key),
+    }
     try:
-        print(
-            f"[lifespan] Starting up, db_url backend: {settings.db_url.split('@')[0].split('://')[0] if '@' in settings.db_url else settings.db_url[:30]}",
-            flush=True,
-        )
-        configure_logging()
-        print("[lifespan] Logging configured", flush=True)
         settings.validate()
-        print("[lifespan] Settings validated", flush=True)
         if settings.auto_migrate:
-            print("[lifespan] Running migrations...", flush=True)
             run_migrations()
-            print("[lifespan] Migrations complete", flush=True)
         ensure_storage_dirs()
-        print("[lifespan] Storage dirs ensured", flush=True)
+        bootstrap_result = None
+        seeded_runs = 0
         with SessionLocal() as session:
-            if bootstrap_api_key(session):
-                print("[lifespan] Bootstrap API key created", flush=True)
-        if settings.seed_demo_data:
-            print("[lifespan] Seeding demo data...", flush=True)
-            with SessionLocal() as session:
-                count = seed_demo_runs(session)
-                print(f"[lifespan] Seeded {count} demo runs", flush=True)
-        print("[lifespan] Startup complete", flush=True)
+            bootstrap_result = ensure_bootstrap_api_key(session)
+            if settings.seed_demo_data:
+                seeded_runs = seed_demo_runs(session)
+        log_system_event(
+            "startup_complete",
+            **startup_context,
+            storage=storage_status(),
+            bootstrap_api_key_status=bootstrap_result.status if bootstrap_result else "disabled",
+            seeded_runs=seeded_runs,
+        )
     except Exception as exc:
-        print(f"[lifespan] FATAL startup error: {exc}", file=sys.stderr, flush=True)
-        print(f"[lifespan] FATAL startup error: {exc}", flush=True)
-        traceback.print_exc()
+        log_system_event(
+            "startup_failed",
+            level=logging.ERROR,
+            exc_info=True,
+            **startup_context,
+            error=str(exc),
+        )
         raise
     yield
 
@@ -342,9 +346,21 @@ def healthz():
 
 @app.get("/readyz")
 def readyz(session: Session = Depends(get_session)):
-    session.execute(select(1))
-    ensure_storage_dirs()
-    return {"ok": True, "storage": storage_status()}
+    checks = {
+        "database": _database_check(session),
+        "storage": _storage_check(),
+        "auth": {
+            "legacy_upload_token_enabled": settings.legacy_upload_token_enabled,
+            "bootstrap_api_key_configured": bool(settings.bootstrap_api_key),
+        },
+    }
+    ok = all(component.get("ok", True) for name, component in checks.items() if name != "auth")
+    payload = {"ok": ok, "environment": settings.environment, "checks": checks}
+    if ok:
+        return payload
+
+    log_system_event("readiness_failed", level=logging.WARNING, checks=checks)
+    return JSONResponse(status_code=503, content=payload)
 
 
 @app.post("/api/runs/{run_id}/trigger")
@@ -422,3 +438,25 @@ def _artifact_response(key: str, media_type: str, not_found_detail: str) -> Resp
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=not_found_detail) from exc
     return Response(content=payload, media_type=media_type)
+
+
+def _database_check(session: Session) -> dict[str, object]:
+    details: dict[str, object] = {"ok": True, **describe_database()}
+    try:
+        session.execute(select(1))
+    except Exception as exc:
+        details["ok"] = False
+        details["error"] = str(exc)
+    return details
+
+
+def _storage_check() -> dict[str, object]:
+    try:
+        ensure_storage_dirs()
+        return {"ok": True, **storage_status()}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "backend": settings.storage_backend,
+            "error": str(exc),
+        }

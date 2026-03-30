@@ -27,8 +27,13 @@ This repo now supports a more production-ready topology:
 
 6. Store that secret in your submission workflow or benchmark runner.
 
+Optional bootstrap path:
+- `WMG_BOOTSTRAP_API_KEY` can create the first admin/writer key automatically on startup when no API keys exist yet.
+- Treat it as a one-time escape hatch, not the long-term auth mechanism.
+- Remove it from the Render dashboard after a durable production API key is in place.
+
 Notes:
-- `render.yaml` provisions Postgres and enables migrations plus seeded demo runs.
+- `render.yaml` enables migrations, JSON logging, and seeded demo runs.
 - `WMG_DB_URL` is normalized automatically for SQLAlchemy when Render injects a Postgres connection string.
 - For real artifact durability, switch to `WMG_STORAGE_BACKEND=s3` and provide the S3-compatible bucket credentials below.
 
@@ -101,6 +106,26 @@ make stop-public
 - Liveness: `/healthz`
 - Readiness: `/readyz`
 - Metrics: `/metrics`
+
+The readiness endpoint now returns per-component checks for `database`, `storage`, and `auth`, and responds with `503` if database or storage is not ready.
+
+## Verification Commands
+
+Create a benchmark run against a deployed API:
+
+```bash
+.venv/bin/python scripts/demo_run.py \
+  --api-base https://worldmodel-gym-api.onrender.com \
+  --api-key "$WMG_API_KEY"
+```
+
+Verify the full public deployment:
+
+```bash
+.venv/bin/python scripts/verify_deployment.py \
+  --api-base https://worldmodel-gym-api.onrender.com \
+  --web-base https://world-model-gym.vercel.app
+```
 
 ## References
 

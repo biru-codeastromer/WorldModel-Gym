@@ -28,6 +28,13 @@ class AuthenticatedPrincipal:
         return "admin" in self.scopes or scope in self.scopes
 
 
+@dataclass(frozen=True)
+class BootstrapApiKeyResult:
+    status: str
+    key_prefix: str | None = None
+    name: str | None = None
+
+
 def generate_api_key() -> str:
     return f"wmg_{secrets.token_urlsafe(24)}"
 
@@ -75,6 +82,27 @@ def create_api_key(
     session.commit()
     session.refresh(item)
     return item, secret
+
+
+def ensure_bootstrap_api_key(session: Session) -> BootstrapApiKeyResult:
+    if not settings.bootstrap_api_key:
+        return BootstrapApiKeyResult(status="disabled")
+
+    existing = session.scalar(select(ApiKey).limit(1))
+    if existing is not None:
+        return BootstrapApiKeyResult(
+            status="already_present",
+            key_prefix=existing.key_prefix,
+            name=existing.name,
+        )
+
+    item, _ = create_api_key(
+        session,
+        name="prod-writer",
+        scopes=["admin", "runs:write"],
+        raw_key=settings.bootstrap_api_key,
+    )
+    return BootstrapApiKeyResult(status="created", key_prefix=item.key_prefix, name=item.name)
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:

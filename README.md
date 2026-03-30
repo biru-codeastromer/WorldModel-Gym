@@ -119,6 +119,20 @@ Seed demo data:
 .venv/bin/python -m worldmodel_server.cli seed-demo-data --force
 ```
 
+Upload a demo run against a live or local API:
+
+```bash
+.venv/bin/python scripts/demo_run.py --api-base http://localhost:8000
+```
+
+Verify the public deployment end to end:
+
+```bash
+.venv/bin/python scripts/verify_deployment.py \
+  --api-base https://worldmodel-gym-api.onrender.com \
+  --web-base https://world-model-gym.vercel.app
+```
+
 Operational runbook:
 
 - [docs/OPERATIONS.md](docs/OPERATIONS.md)
@@ -143,6 +157,7 @@ make test
 make demo
 make seed-demo
 make create-api-key NAME=local-writer SCOPE=runs:write
+make verify-deployment
 make deploy
 make stop
 make deploy-public

@@ -104,3 +104,37 @@ def test_public_rate_limit_returns_429(tmp_path, monkeypatch):
 
     assert first.status_code == 200
     assert second.status_code == 429
+
+
+def test_readyz_reports_component_checks(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+
+    with TestClient(app) as client:
+        response = client.get("/readyz")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["checks"]["database"]["ok"] is True
+    assert payload["checks"]["storage"]["ok"] is True
+    assert payload["checks"]["auth"]["legacy_upload_token_enabled"] is True
+
+
+def test_bootstrap_api_key_is_created_once(tmp_path, monkeypatch):
+    monkeypatch.setenv("WMG_BOOTSTRAP_API_KEY", "bootstrap_key_for_tests_123456")
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    api_key_model = modules["worldmodel_server.models"].ApiKey
+
+    with TestClient(app):
+        with session_local() as session:
+            keys = session.query(api_key_model).all()
+            assert len(keys) == 1
+            assert keys[0].name == "prod-writer"
+
+    with TestClient(app):
+        with session_local() as session:
+            keys = session.query(api_key_model).all()
+            assert len(keys) == 1
