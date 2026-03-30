@@ -5,11 +5,11 @@ test("homepage and seeded leaderboard feel populated", async ({ page }) => {
 
   await expect(
     page.getByRole("heading", {
-      name: /Evaluate long-horizon planning agents/i
+      name: /Turn your planning research into/i
     })
   ).toBeVisible();
 
-  await page.getByRole("link", { name: /View Leaderboard/i }).click();
+  await page.getByRole("link", { name: /Start Exploring/i }).click();
   await expect(page).toHaveURL(/\/leaderboard/);
   await expect(page.getByText(/Track planning quality/i)).toBeVisible();
   await expect(page.locator("table tbody tr").first()).toBeVisible();
