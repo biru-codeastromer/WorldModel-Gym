@@ -19,75 +19,86 @@ const curatedTasks: TaskRecord[] = [
 ];
 
 export default async function TasksPage() {
+  const renderTaskCard = (task: TaskRecord, mode: "Live" | "Fallback") => (
+    <article key={task.id} className="site-panel rounded-[28px] p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--ink)]">{task.id}</h3>
+        <span className="rounded-full border border-[var(--line)] bg-[var(--paper)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+          {mode}
+        </span>
+      </div>
+      <p className="mt-4 text-base leading-7 text-[var(--muted)]">{task.description}</p>
+      <div className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--sand)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Defaults</p>
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-[var(--font-mono)] text-xs leading-6 text-[var(--ink)]">
+          {JSON.stringify(task.defaults ?? {}, null, 2)}
+        </pre>
+      </div>
+    </article>
+  );
+
   try {
     const data = await fetchTasks();
     const tasks = data.tasks ?? [];
 
     return (
-      <section className="space-y-5">
-        <div className="glass-panel rounded-[30px] p-7 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Task Browser</p>
-          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-ink">Benchmark worlds with explicit failure modes.</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            Each environment is designed to stress planning depth, memory, and transfer. Defaults are shown inline so
-            visitors can understand the benchmark without reading the source first.
-          </p>
-        </div>
+      <section className="space-y-8">
+        <section className="border-b border-t border-[var(--line)] py-10">
+          <div className="grid gap-8 lg:grid-cols-[1fr_0.95fr]">
+            <div>
+              <p className="section-kicker">Task browser</p>
+              <h2 className="mt-5 max-w-3xl text-5xl font-semibold leading-[1.06] tracking-[-0.05em] text-[var(--ink)]">
+                Benchmark worlds with explicit failure modes and polished task framing.
+              </h2>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--muted)]">
+                Each environment is packaged the same way a great product page would be: clean defaults, clear purpose,
+                and enough context for someone to understand the benchmark before reading source code.
+              </p>
+            </div>
+
+            <div className="site-panel paper-matrix rounded-[30px] p-6">
+              <div className="grid gap-3 md:grid-cols-2">
+                {[
+                  "Sparse rewards with delayed payoff",
+                  "Partial observability and memory pressure",
+                  "Procedural seeds for transfer testing",
+                  "Consistent task metadata for demos and papers"
+                ].map((item) => (
+                  <div key={item} className="site-soft-panel rounded-[18px] px-4 py-5 text-sm font-medium leading-6 text-[var(--ink)]">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {tasks.length === 0 ? (
-          <div className="glass-panel rounded-[28px] border border-dashed border-ink/30 p-8 text-center text-slate-600">
+          <div className="site-panel rounded-[30px] border border-dashed border-[var(--line-strong)] p-10 text-center text-[var(--muted)]">
             No tasks available.
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {tasks.map((task) => (
-              <article key={task.id} className="glass-panel rounded-[28px] p-5 shadow-card">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-xl font-semibold text-ink">{task.id}</h3>
-                  <span className="rounded-full bg-ink px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
-                    Ready
-                  </span>
-                </div>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{task.description}</p>
-                <pre className="mt-5 overflow-x-auto rounded-[22px] bg-slate-950 p-4 text-xs text-emerald-200">
-                  {JSON.stringify(task.defaults ?? {}, null, 2)}
-                </pre>
-              </article>
-            ))}
-          </div>
+          <div className="grid gap-4 xl:grid-cols-3">{tasks.map((task) => renderTaskCard(task, "Live"))}</div>
         )}
       </section>
     );
   } catch {
     return (
-      <section className="space-y-5">
-        <div className="glass-panel rounded-[30px] p-7 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Task Browser</p>
-          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-ink">Benchmark worlds with explicit failure modes.</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            The API is currently unavailable, so this page is showing curated benchmark metadata instead of live task
-            discovery.
+      <section className="space-y-8">
+        <section className="border-b border-t border-[var(--line)] py-10">
+          <p className="section-kicker">Task browser</p>
+          <h2 className="mt-5 max-w-3xl text-5xl font-semibold leading-[1.06] tracking-[-0.05em] text-[var(--ink)]">
+            Benchmark worlds with explicit failure modes and fallback-ready presentation.
+          </h2>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--muted)]">
+            The live API is unavailable right now, so this page is showing curated benchmark metadata instead of live
+            task discovery.
           </p>
-        </div>
-        <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-card">
+        </section>
+        <div className="rounded-[26px] border border-[var(--line-strong)] bg-[#f8ede1] px-5 py-4 text-sm text-[#7a5433]">
           Live task discovery failed. Check the backend deployment or `NEXT_PUBLIC_API_BASE`.
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {curatedTasks.map((task) => (
-            <article key={task.id} className="glass-panel rounded-[28px] p-5 shadow-card">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-ink">{task.id}</h3>
-                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                  Fallback
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{task.description}</p>
-              <pre className="mt-5 overflow-x-auto rounded-[22px] bg-slate-950 p-4 text-xs text-emerald-200">
-                {JSON.stringify(task.defaults ?? {}, null, 2)}
-              </pre>
-            </article>
-          ))}
-        </div>
+        <div className="grid gap-4 xl:grid-cols-3">{curatedTasks.map((task) => renderTaskCard(task, "Fallback"))}</div>
       </section>
     );
   }

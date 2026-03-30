@@ -21,71 +21,76 @@ export default function LeaderboardPage() {
   const fastestPlanner = rows.length > 0 ? Math.min(...rows.map((row) => row.planning_cost_ms_per_step)) : 0;
 
   return (
-    <section className="space-y-5">
-      <div className="glass-panel rounded-[30px] p-7 shadow-card">
+    <section className="space-y-8">
+      <section className="border-b border-t border-[var(--line)] py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Leaderboard</p>
-            <h2 className="mt-2 text-4xl font-semibold tracking-tight text-ink">Track planning quality, not just screenshots.</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+            <p className="section-kicker">Leaderboard</p>
+            <h2 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.06] tracking-[-0.05em] text-[var(--ink)]">
+              Track planning quality with the same finish as a product launch page.
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--muted)]">
               Compare runs by success rate, return, and per-step planning cost across reproducible benchmark tracks.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="rounded-[24px] bg-white/85 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Runs</p>
-              <p className="mt-1 text-2xl font-semibold text-ink">{rows.length}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="site-panel rounded-[22px] px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Runs</p>
+              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">{rows.length}</p>
             </div>
-            <div className="rounded-[24px] bg-white/85 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Best Success</p>
-              <p className="mt-1 text-2xl font-semibold text-ink">{topSuccess.toFixed(2)}</p>
+            <div className="site-panel rounded-[22px] px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Best Success</p>
+              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">{topSuccess.toFixed(2)}</p>
             </div>
-            <div className="rounded-[24px] bg-white/85 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Fastest Cost</p>
-              <p className="mt-1 text-2xl font-semibold text-ink">{rows.length > 0 ? fastestPlanner.toFixed(2) : "--"}</p>
+            <div className="site-panel rounded-[22px] px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Fastest Cost</p>
+              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+                {rows.length > 0 ? fastestPlanner.toFixed(2) : "--"}
+              </p>
             </div>
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap gap-2">
-          {tracks.map((item) => (
-            <button
-              key={item}
-              onClick={() => setTrack(item)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                track === item ? "bg-ink text-white" : "bg-white text-ink hover:-translate-y-0.5"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+      </section>
+
+      <div className="grid grid-cols-3 md:grid-cols-3">
+        {tracks.map((item) => (
+          <button
+            key={item}
+            onClick={() => setTrack(item)}
+            className={`eyebrow-tab ${track === item ? "is-active" : ""}`}
+          >
+            {item}
+          </button>
+        ))}
       </div>
 
       {isLoading ? (
-        <div className="glass-panel rounded-[28px] p-6 shadow-card">
-          <p className="text-sm font-medium text-slate-600">Loading leaderboard signals...</p>
+        <div className="site-panel rounded-[30px] p-6">
+          <p className="text-sm font-medium text-[var(--muted)]">Loading leaderboard signals...</p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="h-28 animate-pulse rounded-[22px] bg-white/80" />
-            <div className="h-28 animate-pulse rounded-[22px] bg-white/80" />
-            <div className="h-28 animate-pulse rounded-[22px] bg-white/80" />
+            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
+            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
+            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
           </div>
         </div>
       ) : null}
 
       {isError ? (
-        <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-800">Live API unavailable</p>
-          <h3 className="mt-2 text-2xl font-semibold text-amber-950">The frontend is up, but the backend URL is not serving leaderboard data.</h3>
-          <p className="mt-3 text-sm leading-7 text-amber-900">
+        <div className="rounded-[30px] border border-[var(--line-strong)] bg-[#f8ede1] p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9b6b40]">Live API unavailable</p>
+          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#4e3218]">
+            The frontend theme is live, but the backend URL is not serving leaderboard data.
+          </h3>
+          <p className="mt-4 text-base leading-7 text-[#7c5330]">
             {error instanceof Error ? error.message : "Failed to load leaderboard data."}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/" className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white">
+            <Link href="/" className="button-primary px-5 py-3 text-sm font-semibold">
               Back to Home
             </Link>
             <Link
               href="/tasks"
-              className="rounded-full border border-amber-300 bg-white px-5 py-2.5 text-sm font-semibold text-amber-900"
+              className="button-secondary px-5 py-3 text-sm font-semibold"
             >
               Browse Tasks Instead
             </Link>
@@ -94,10 +99,12 @@ export default function LeaderboardPage() {
       ) : null}
 
       {!isLoading && !isError && rows.length === 0 ? (
-        <div className="glass-panel rounded-[28px] border border-dashed border-ink/20 p-8 text-center shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">No runs yet</p>
-          <h3 className="mt-2 text-2xl font-semibold text-ink">This track is waiting for its first uploaded evaluation.</h3>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
+        <div className="site-panel rounded-[30px] border border-dashed border-[var(--line-strong)] p-10 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">No runs yet</p>
+          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+            This track is waiting for its first uploaded evaluation.
+          </h3>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
             Run the demo pipeline or upload benchmark artifacts to populate charts, rankings, and individual run views.
           </p>
         </div>
@@ -106,10 +113,10 @@ export default function LeaderboardPage() {
       {rows.length > 0 ? (
         <>
           <LeaderboardChart data={rows} />
-          <div className="glass-panel overflow-x-auto rounded-[28px] p-5 shadow-card">
+          <div className="site-panel overflow-x-auto rounded-[30px] p-5">
             <table className="w-full min-w-[780px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500">
+              <thead className="text-[var(--muted)]">
+                <tr className="border-b border-[var(--line)]">
                   <th className="py-2">Run</th>
                   <th className="py-2">Env</th>
                   <th className="py-2">Agent</th>
@@ -120,9 +127,9 @@ export default function LeaderboardPage() {
               </thead>
               <tbody>
                 {rows.map((row, index) => (
-                  <tr key={row.run_id} className="border-b border-slate-100 last:border-b-0">
+                  <tr key={row.run_id} className="border-b border-[var(--line)]/70 last:border-b-0">
                     <td className="py-3 font-mono text-xs">
-                      <Link className="text-ember hover:underline" href={`/runs/${row.run_id}`}>
+                      <Link className="text-[var(--ink)] underline-offset-4 hover:underline" href={`/runs/${row.run_id}`}>
                         #{index + 1} {row.run_id}
                       </Link>
                     </td>

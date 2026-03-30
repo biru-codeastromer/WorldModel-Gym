@@ -3,11 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --bg: #eef4ff;
-  --fg: #11223a;
-  --muted: #5f6c84;
-  --panel: rgba(255, 255, 255, 0.82);
-  --stroke: rgba(17, 34, 58, 0.1);
+  --page: #f3ede5;
+  --paper: #fcf8f2;
+  --paper-strong: #fffdfa;
+  --sand: #efe7dc;
+  --line: #dfd3c7;
+  --line-strong: #cab8a3;
+  --ink: #161412;
+  --muted: #6d655d;
+  --dark: #181715;
+  --dark-soft: #242220;
+  --accent: #b89972;
+  --accent-soft: #d6c3aa;
+  --shadow: 0 24px 60px rgba(36, 28, 18, 0.08);
 }
 
 * {
@@ -20,12 +28,10 @@ html {
 
 body {
   margin: 0;
-  color: var(--fg);
+  color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(255, 122, 61, 0.2), transparent 28%),
-    radial-gradient(circle at top right, rgba(102, 217, 186, 0.22), transparent 24%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(229, 239, 255, 0.25)),
-    linear-gradient(180deg, #f7faff 0%, #e7eefc 100%);
+    linear-gradient(to right, transparent 88px, rgba(202, 184, 163, 0.58) 88px, rgba(202, 184, 163, 0.58) 89px, transparent 89px, transparent calc(100% - 89px), rgba(202, 184, 163, 0.58) calc(100% - 89px), rgba(202, 184, 163, 0.58) calc(100% - 88px), transparent calc(100% - 88px)),
+    linear-gradient(180deg, var(--paper) 0%, var(--page) 100%);
   min-height: 100vh;
   position: relative;
 }
@@ -35,25 +41,126 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(rgba(17, 34, 58, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 34, 58, 0.035) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 88%);
+  background-image: radial-gradient(rgba(110, 98, 86, 0.16) 1px, transparent 1px);
+  background-size: 14px 14px;
+  opacity: 0.42;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.3), transparent 76%);
 }
 
 ::selection {
-  background: rgba(255, 122, 61, 0.22);
+  background: rgba(184, 153, 114, 0.28);
 }
 
-.glass-panel {
-  background: var(--panel);
-  backdrop-filter: blur(18px);
-  border: 1px solid var(--stroke);
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-.grid-accent {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)),
-    linear-gradient(135deg, rgba(255, 122, 61, 0.08), rgba(102, 217, 186, 0.08));
+.site-shell {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 1360px;
+  padding: 0 24px 88px;
+}
+
+.site-panel {
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 250, 0.92);
+  box-shadow: var(--shadow);
+}
+
+.site-soft-panel {
+  border: 1px solid var(--line);
+  background: rgba(239, 231, 220, 0.86);
+}
+
+.site-dark-panel {
+  border: 1px solid #2b2823;
+  background: var(--dark);
+  color: #f8f2ea;
+  box-shadow: 0 24px 60px rgba(17, 16, 13, 0.24);
+}
+
+.dot-matrix {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 11px 11px;
+}
+
+.paper-matrix {
+  background-image: radial-gradient(rgba(108, 101, 93, 0.12) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-kicker::before {
+  content: "";
+  display: inline-block;
+  height: 14px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.brand-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 700;
+}
+
+.button-primary {
+  border-radius: 14px;
+  background: var(--ink);
+  color: #fffdfa;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.button-primary:hover,
+.button-secondary:hover {
+  transform: translateY(-1px);
+}
+
+.button-secondary {
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 253, 250, 0.88);
+  color: var(--ink);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.eyebrow-tab {
+  border-right: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  padding: 18px 20px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.eyebrow-tab:first-child {
+  border-left: 1px solid var(--line);
+}
+
+.eyebrow-tab.is-active {
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+}
+
+.footer-link {
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+
+.footer-link:hover {
+  color: var(--ink);
 }

@@ -6,13 +6,13 @@ import { LeaderboardRow } from "@/lib/api";
 
 export function LeaderboardChart({ data }: { data: LeaderboardRow[] }) {
   return (
-    <div className="glass-panel h-72 w-full rounded-[26px] p-5 shadow-card">
+    <div className="site-panel paper-matrix h-80 w-full rounded-[30px] p-6">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Signal</p>
-          <h3 className="text-lg font-semibold text-ink">Success Rate Trend</h3>
+          <p className="section-kicker">Signal</p>
+          <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--ink)]">Success Rate Trend</h3>
         </div>
-        <p className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+        <p className="rounded-full border border-[var(--line)] bg-[var(--paper)] px-4 py-2 text-xs font-medium text-[var(--muted)]">
           Higher is better
         </p>
       </div>
@@ -20,25 +20,25 @@ export function LeaderboardChart({ data }: { data: LeaderboardRow[] }) {
         <AreaChart data={data} margin={{ top: 10, left: 0, right: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="successFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="5%" stopColor="#ff7a3d" stopOpacity={0.45} />
-              <stop offset="95%" stopColor="#ff7a3d" stopOpacity={0.03} />
+              <stop offset="5%" stopColor="#b89972" stopOpacity={0.48} />
+              <stop offset="95%" stopColor="#b89972" stopOpacity={0.04} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(17, 28, 46, 0.08)" strokeDasharray="4 4" vertical={false} />
+          <CartesianGrid stroke="rgba(138, 122, 104, 0.22)" strokeDasharray="4 4" vertical={false} />
           <XAxis
             dataKey="run_id"
-            tick={{ fontSize: 10, fill: "#5f6c84" }}
+            tick={{ fontSize: 10, fill: "#6d655d" }}
             interval={0}
             angle={-25}
             height={50}
             textAnchor="end"
           />
-          <YAxis domain={[0, 1]} tick={{ fontSize: 12, fill: "#5f6c84" }} />
+          <YAxis domain={[0, 1]} tick={{ fontSize: 12, fill: "#6d655d" }} />
           <Tooltip />
           <Area
             type="monotone"
             dataKey="success_rate"
-            stroke="#ff7a3d"
+            stroke="#151412"
             fill="url(#successFill)"
             strokeWidth={3}
           />

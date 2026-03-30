@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { Cormorant_Garamond, IBM_Plex_Mono, Manrope } from "next/font/google";
 
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
+import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space" });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  weight: ["600", "700"]
+});
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
 
 export const metadata: Metadata = {
@@ -45,11 +51,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${plexMono.variable}`}>
-      <body className="font-[var(--font-space)]">
+    <html lang="en" className={`${manrope.variable} ${cormorant.variable} ${plexMono.variable}`}>
+      <body className="font-[var(--font-sans)]">
         <Providers>
           <Nav />
-          <main className="mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+          <main className="site-shell pt-8">{children}</main>
+          <SiteFooter />
         </Providers>
       </body>
     </html>

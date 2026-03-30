@@ -1,40 +1,63 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Home" },
+  { href: "/", label: "Overview" },
   { href: "/tasks", label: "Tasks" },
   { href: "/leaderboard", label: "Leaderboard" }
 ];
 
 export function Nav() {
+  const pathname = usePathname();
+
   return (
-    <header className="glass-panel mx-auto mt-4 w-full max-w-6xl rounded-[28px] px-5 py-4 shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-            World Models Research
-          </p>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">WorldModel Gym</h1>
+    <header className="site-shell sticky top-0 z-30 pt-4">
+      <div className="site-panel flex items-center justify-between rounded-[22px] px-6 py-4 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--paper-strong)] text-lg font-semibold text-[var(--ink)]">
+            W
+          </div>
+          <div>
+            <p className="text-sm font-semibold leading-none text-[var(--ink)]">
+              WorldModel <span className="brand-accent">Gym</span>
+            </p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+              Research Benchmark Platform
+            </p>
+          </div>
         </div>
-        <nav className="flex flex-wrap gap-2">
+
+        <nav className="hidden items-center gap-6 text-sm font-medium text-[var(--muted)] md:flex">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-full border border-ink/10 bg-white/80 px-4 py-2 text-sm font-medium text-ink transition hover:-translate-y-0.5 hover:bg-white"
+              className={`transition ${pathname === link.href ? "text-[var(--ink)]" : "hover:text-[var(--ink)]"}`}
             >
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/leaderboard"
+            className="button-primary px-5 py-3 text-sm font-semibold"
+          >
+            Get Started
+          </Link>
           <a
             href="https://github.com/biru-codeastromer/WorldModel-Gym"
             target="_blank"
             rel="noreferrer"
-            className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-white transition hover:-translate-y-0.5"
+            className="rounded-xl border border-[var(--line)] px-4 py-3 text-sm font-semibold text-[var(--ink)] transition hover:bg-[var(--paper)]"
           >
             GitHub
           </a>
         </nav>
+
+        <Link href="/leaderboard" className="button-primary px-4 py-3 text-sm font-semibold md:hidden">
+          Start
+        </Link>
       </div>
     </header>
   );

@@ -68,64 +68,70 @@ export default function RunViewerPage() {
   const traceLines = episodes;
 
   return (
-    <section className="space-y-5">
-      <div className="glass-panel rounded-[30px] p-6 shadow-card">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Run Viewer</p>
-        <h2 className="mt-2 text-4xl font-semibold tracking-tight text-ink">Run {runId}</h2>
-        <p className="mt-3 text-sm text-slate-600">
+    <section className="space-y-8">
+      <section className="border-b border-t border-[var(--line)] py-10">
+        <p className="section-kicker">Run viewer</p>
+        <h2 className="mt-5 text-5xl font-semibold tracking-[-0.05em] text-[var(--ink)]">Run {runId}</h2>
+        <p className="mt-5 text-lg leading-8 text-[var(--muted)]">
           Agent: <strong>{run?.agent ?? "--"}</strong> | Env: <strong>{run?.env ?? "--"}</strong> | Track:{" "}
           <strong>{run?.track ?? "--"}</strong>
         </p>
-      </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="glass-panel rounded-[26px] p-4 shadow-card">
-          <p className="text-xs uppercase text-slate-500">Success Rate</p>
-          <p className="text-2xl font-semibold text-ink">{Number(metrics.success_rate ?? 0).toFixed(2)}</p>
+        <div className="site-panel rounded-[24px] p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Success Rate</p>
+          <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+            {Number(metrics.success_rate ?? 0).toFixed(2)}
+          </p>
         </div>
-        <div className="glass-panel rounded-[26px] p-4 shadow-card">
-          <p className="text-xs uppercase text-slate-500">Mean Return</p>
-          <p className="text-2xl font-semibold text-ink">{Number(metrics.mean_return ?? 0).toFixed(2)}</p>
+        <div className="site-panel rounded-[24px] p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Mean Return</p>
+          <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+            {Number(metrics.mean_return ?? 0).toFixed(2)}
+          </p>
         </div>
-        <div className="glass-panel rounded-[26px] p-4 shadow-card">
-          <p className="text-xs uppercase text-slate-500">Model Fidelity (k1)</p>
-          <p className="text-2xl font-semibold text-ink">{Number(metrics.model_fidelity?.k1 ?? 0).toFixed(3)}</p>
+        <div className="site-panel rounded-[24px] p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Model Fidelity (k1)</p>
+          <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+            {Number(metrics.model_fidelity?.k1 ?? 0).toFixed(3)}
+          </p>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <article className="glass-panel rounded-[28px] p-5 shadow-card">
-          <h3 className="text-lg font-semibold text-ink">Episode Timeline</h3>
-          <p className="mt-1 text-sm text-slate-500">Episodes logged: {traceLines.length}</p>
+        <article className="site-panel rounded-[30px] p-6">
+          <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--ink)]">Episode Timeline</h3>
+          <p className="mt-2 text-sm text-[var(--muted)]">Episodes logged: {traceLines.length}</p>
           <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
             {traceLines.map((ep: any, idx: number) => (
-              <div key={idx} className="rounded-[18px] bg-white/80 p-3 font-mono text-xs text-ink">
+              <div key={idx} className="site-soft-panel rounded-[18px] p-3 font-mono text-xs text-[var(--ink)]">
                 Episode {idx + 1}: {ep.steps?.length ?? 0} steps
               </div>
             ))}
           </div>
         </article>
 
-        <article className="glass-panel rounded-[28px] p-5 shadow-card">
-          <h3 className="text-lg font-semibold text-ink">Planner Visualization</h3>
+        <article className="site-panel rounded-[30px] p-6">
+          <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--ink)]">Planner Visualization</h3>
           {firstPlanner ? (
-            <pre className="mt-3 max-h-64 overflow-auto rounded-[20px] bg-slate-950 p-4 text-xs text-emerald-200">
+            <pre className="mt-4 max-h-64 overflow-auto rounded-[20px] bg-[#171512] p-4 text-xs text-[#eee3d6]">
               {JSON.stringify(firstPlanner, null, 2)}
             </pre>
           ) : (
-            <p className="mt-3 text-sm text-slate-600">No planner trace available for this run.</p>
+            <p className="mt-4 text-sm text-[var(--muted)]">No planner trace available for this run.</p>
           )}
         </article>
       </div>
 
-      <article className="glass-panel rounded-[28px] p-5 shadow-card">
-        <h3 className="text-lg font-semibold text-ink">Events</h3>
+      <article className="site-panel rounded-[30px] p-6">
+        <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--ink)]">Events</h3>
         {events.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">No semantic events recorded.</p>
+          <p className="mt-3 text-sm text-[var(--muted)]">No semantic events recorded.</p>
         ) : (
           <ul className="mt-3 grid gap-2 md:grid-cols-2">
             {events.slice(0, 60).map((evt, idx) => (
-              <li key={idx} className="rounded-[18px] border border-ink/10 bg-white/80 p-3 text-sm text-ink">
+              <li key={idx} className="site-soft-panel rounded-[18px] p-3 text-sm text-[var(--ink)]">
                 t={evt.t}: {evt.name}
               </li>
             ))}
