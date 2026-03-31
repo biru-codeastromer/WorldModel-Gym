@@ -95,24 +95,28 @@ class StochasticLatentModel(TorchModelBase):
 
         for item in batch:
             posterior_state = self.observe(self.init_state(batch_size=1), item["obs"])
-            pred_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(
-                posterior_state, int(item["action"])
-            )
-            del pred_state
+            action_tensor = self._action_tensor(int(item["action"]))
+            prior_stats = self.prior(torch.cat([posterior_state["h"], action_tensor], dim=-1))
+            mean, logvar = torch.chunk(prior_stats, 2, dim=-1)
+            std = torch.exp(0.5 * logvar).clamp(min=1e-4)
+            eps = torch.randn_like(std)
+            z = mean + eps * std
+            h = self.gru(z, posterior_state["h"])
+
+            pred_reward = self.reward_head(h).squeeze(-1)
+            pred_done_prob = torch.sigmoid(self.done_head(h)).squeeze(-1)
 
             target_reward = torch.tensor([item["reward"]], device=self.device)
             target_done = torch.tensor([float(item["done"])], device=self.device)
 
-            reward_loss = (
-                (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
-            )
-            done_loss = (
-                (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
-            )
+            reward_loss = (pred_reward - target_reward).pow(2).mean()
+            done_loss = (pred_done_prob - target_done).pow(2).mean()
 
-            mean = posterior_state["mean"]
-            logvar = posterior_state["logvar"]
-            kl = -0.5 * torch.mean(1 + logvar - mean.pow(2) - logvar.exp())
+            posterior_mean = posterior_state["mean"]
+            posterior_logvar = posterior_state["logvar"]
+            kl = -0.5 * torch.mean(
+                1 + posterior_logvar - posterior_mean.pow(2) - posterior_logvar.exp()
+            )
 
             total = total + reward_loss + done_loss + 0.1 * kl
             kl_total = kl_total + kl

@@ -86,20 +86,18 @@ class DeterministicLatentModel(TorchModelBase):
 
         for item in batch:
             state = self.observe(self.init_state(batch_size=1), item["obs"])
-            next_state, _pred_obs, pred_reward, pred_done, _aux = self.predict(
-                state, int(item["action"])
-            )
-            del next_state
+            action_tensor = self._action_tensor(int(item["action"]))
+            transition_input = torch.cat([state["latent"], action_tensor], dim=-1)
+            next_latent = self.transition(transition_input)
+
+            pred_reward = self.reward_head(next_latent).squeeze(-1)
+            pred_done_prob = torch.sigmoid(self.done_head(next_latent)).squeeze(-1)
 
             target_reward = torch.tensor([item["reward"]], device=self.device)
             target_done = torch.tensor([float(item["done"])], device=self.device)
 
-            reward_loss = (
-                (torch.tensor([pred_reward], device=self.device) - target_reward).pow(2).mean()
-            )
-            done_loss = (
-                (torch.tensor([float(pred_done)], device=self.device) - target_done).pow(2).mean()
-            )
+            reward_loss = (pred_reward - target_reward).pow(2).mean()
+            done_loss = (pred_done_prob - target_done).pow(2).mean()
             loss = loss + reward_loss + done_loss
 
         loss = loss / len(batch)
