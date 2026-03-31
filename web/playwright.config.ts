@@ -12,6 +12,7 @@ export default defineConfig({
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
+  globalSetup: "./tests/e2e/global-setup.ts",
   use: {
     baseURL: "http://127.0.0.1:3100",
     trace: "on-first-retry"
@@ -27,7 +28,7 @@ export default defineConfig({
             WMG_UPLOAD_TOKEN: "e2e-token",
             WMG_AUTO_MIGRATE: "true",
             WMG_ENABLE_METRICS: "false",
-            WMG_SEED_DEMO_DATA: "true"
+            WMG_SEED_DEMO_DATA: "false"
           },
           url: "http://127.0.0.1:8100/healthz",
           reuseExistingServer: !process.env.CI,
