@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 async function waitFor(url: string, timeoutMs: number): Promise<void> {
@@ -19,10 +20,12 @@ async function waitFor(url: string, timeoutMs: number): Promise<void> {
 
 export default async function globalSetup() {
   const repoRoot = path.resolve(__dirname, "../../..");
-  const pythonExecutable = path.resolve(
-    repoRoot,
-    process.env.WMG_E2E_PYTHON ?? ".venv/bin/python",
-  );
+  const configuredPython = process.env.WMG_E2E_PYTHON ?? ".venv/bin/python";
+  const resolvedPython =
+    configuredPython.startsWith("/") || configuredPython.includes(path.sep)
+      ? path.resolve(repoRoot, configuredPython)
+      : configuredPython;
+  const pythonExecutable = fs.existsSync(resolvedPython) ? resolvedPython : "python";
   const apiBase = process.env.WMG_E2E_API_BASE ?? "http://127.0.0.1:8100";
   const uploadToken = process.env.WMG_E2E_UPLOAD_TOKEN ?? "e2e-token";
 
