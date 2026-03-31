@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -16,6 +17,8 @@ type WorkflowTab = {
   primaryLabel: string;
   secondaryHref: string;
   secondaryLabel: string;
+  imageSrc: string;
+  imageAlt: string;
 };
 
 const tabs: WorkflowTab[] = [
@@ -37,7 +40,9 @@ const tabs: WorkflowTab[] = [
     primaryHref: "/tasks",
     primaryLabel: "Browse Tasks",
     secondaryHref: "/upload",
-    secondaryLabel: "Upload Existing Run"
+    secondaryLabel: "Upload Existing Run",
+    imageSrc: "/editorial/hero-goumbik.jpg",
+    imageAlt: "Desk with chart and notebook"
   },
   {
     id: "evaluate",
@@ -57,7 +62,9 @@ const tabs: WorkflowTab[] = [
     primaryHref: "/leaderboard",
     primaryLabel: "Open Leaderboard",
     secondaryHref: "/tasks",
-    secondaryLabel: "Review Task Setup"
+    secondaryLabel: "Review Task Setup",
+    imageSrc: "/editorial/market-pixabay.jpg",
+    imageAlt: "Stock board with market metrics"
   },
   {
     id: "upload",
@@ -77,7 +84,9 @@ const tabs: WorkflowTab[] = [
     primaryHref: "/upload",
     primaryLabel: "Open Upload Studio",
     secondaryHref: "https://github.com/biru-codeastromer/WorldModel-Gym/blob/main/docs/OPERATIONS.md",
-    secondaryLabel: "CLI & API Guide"
+    secondaryLabel: "CLI & API Guide",
+    imageSrc: "/editorial/team-thirdman.jpg",
+    imageAlt: "Team reviewing charts and analytics"
   },
   {
     id: "compare",
@@ -97,7 +106,9 @@ const tabs: WorkflowTab[] = [
     primaryHref: "/leaderboard",
     primaryLabel: "Compare Tracks",
     secondaryHref: "/runs/0aadcb16fd8e",
-    secondaryLabel: "Inspect Live Run"
+    secondaryLabel: "Inspect Live Run",
+    imageSrc: "/editorial/chart-rdne.jpg",
+    imageAlt: "Research chart in soft pink tones"
   }
 ];
 
@@ -110,111 +121,97 @@ export function WorkflowShowcase() {
 
   return (
     <div>
-      <div className="mt-8 grid grid-cols-2 md:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             aria-pressed={active.id === tab.id}
             onClick={() => setActiveId(tab.id)}
-            className={`eyebrow-tab ${active.id === tab.id ? "is-active" : ""}`}
+            className={`eyebrow-tab text-left ${active.id === tab.id ? "is-active" : ""}`}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      <div className="site-panel paper-matrix rounded-b-[34px] rounded-t-none p-6 md:p-10">
-        <div className="rounded-[28px] border border-[var(--line)] bg-[var(--paper-strong)] p-6 md:p-10">
-          <div className="flex flex-wrap items-start justify-between gap-5">
-            <div className="max-w-3xl">
-              <p className="section-kicker">Workflow {active.label}</p>
-              <h3 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-                {active.title}
-              </h3>
-              <p className="mt-4 max-w-3xl text-base leading-8 text-[var(--muted)]">
-                {active.description}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link href={active.primaryHref} className="button-primary px-5 py-3 text-sm font-semibold">
-                {active.primaryLabel}
+      <div className="mt-6 grid gap-10 border-t border-[rgba(185,174,195,0.46)] pt-8 lg:grid-cols-[0.92fr_1.08fr]">
+        <div>
+          <p className="section-kicker">Workflow {active.label}</p>
+          <h3 className="mt-6 max-w-2xl font-[var(--font-serif)] text-5xl font-medium leading-[0.96] text-[var(--ink)] md:text-6xl">
+            {active.title}
+          </h3>
+          <p className="mt-5 max-w-xl text-base leading-8 text-[var(--muted)]">{active.description}</p>
+
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href={active.primaryHref} className="button-primary px-5 py-3 text-sm font-semibold">
+              {active.primaryLabel}
+            </Link>
+            {active.secondaryHref.startsWith("http") ? (
+              <a
+                href={active.secondaryHref}
+                target="_blank"
+                rel="noreferrer"
+                className="button-secondary px-5 py-3 text-sm font-semibold"
+              >
+                {active.secondaryLabel}
+              </a>
+            ) : (
+              <Link href={active.secondaryHref} className="button-secondary px-5 py-3 text-sm font-semibold">
+                {active.secondaryLabel}
               </Link>
-              {active.secondaryHref.startsWith("http") ? (
-                <a
-                  href={active.secondaryHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="button-secondary px-5 py-3 text-sm font-semibold"
-                >
-                  {active.secondaryLabel}
-                </a>
-              ) : (
-                <Link href={active.secondaryHref} className="button-secondary px-5 py-3 text-sm font-semibold">
-                  {active.secondaryLabel}
-                </Link>
-              )}
-            </div>
+            )}
           </div>
 
-          <div className="mx-auto mt-8 max-w-3xl rounded-[28px] border border-[var(--line)] bg-white p-5 shadow-[0_24px_60px_rgba(38,28,16,0.08)]">
-            <div className="h-[280px] rounded-[20px] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(250,248,244,0.96),rgba(244,236,226,0.98))]">
-              <div className="grid h-full grid-cols-[0.95fr_1.05fr_0.8fr] gap-4 p-5">
-                <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Prompt</p>
-                  <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{active.prompt}</p>
+          <div className="mt-10 space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Prompt</p>
+              <p className="mt-3 max-w-xl font-[var(--font-serif)] text-2xl leading-[1.2] text-[rgba(29,26,36,0.88)]">
+                {active.prompt}
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {active.steps.map((step, index) => (
+                <div key={step} className={`${index === 1 ? "bg-[var(--sand)]" : "bg-[rgba(255,255,255,0.62)]"} rounded-[24px] border border-[rgba(185,174,195,0.42)] px-5 py-6`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Step {index + 1}</p>
+                  <p className="mt-3 text-sm leading-7 text-[var(--ink)]">{step}</p>
                 </div>
-                <div className="rounded-[18px] border border-[var(--line)] bg-[radial-gradient(circle_at_top,rgba(190,170,145,0.18),transparent_32%),#fffdfa] p-4">
-                  <div className="grid h-full grid-cols-2 gap-3">
-                    {active.steps.map((step, index) => (
-                      <div
-                        key={step}
-                        className={`rounded-[16px] border border-[var(--line)] p-4 text-sm leading-6 ${
-                          index % 2 === 0 ? "bg-[var(--sand)]" : "bg-[var(--paper)]"
-                        }`}
-                      >
-                        {step}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                    {active.reviewLabel}
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="image-frame relative p-4">
+            <div className="relative aspect-[1.08/1] overflow-hidden rounded-[24px]">
+              <Image
+                src={active.imageSrc}
+                alt={active.imageAlt}
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+              />
+            </div>
+            <div className="absolute -left-4 top-8 hidden h-[68%] w-[46%] rounded-[28px] border border-[rgba(61,104,220,0.35)] bg-[rgba(220,229,255,0.28)] lg:block" />
+            <div className="absolute bottom-8 right-8 max-w-[220px] rounded-[24px] border border-[rgba(185,174,195,0.48)] bg-[rgba(255,255,255,0.86)] px-5 py-5 shadow-[0_16px_40px_rgba(33,24,43,0.08)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">{active.reviewLabel}</p>
+              <div className="mt-4 space-y-3">
+                {active.reviewItems.map((item) => (
+                  <p key={item} className="border-b border-[rgba(185,174,195,0.34)] pb-3 text-sm leading-6 text-[var(--ink)] last:border-b-0 last:pb-0">
+                    {item}
                   </p>
-                  <div className="mt-3 space-y-3">
-                    {active.reviewItems.map((item, index) => (
-                      <div
-                        key={item}
-                        className={`rounded-[14px] border border-[var(--line)] px-3 py-4 text-sm font-medium ${
-                          index === 0 ? "bg-[var(--sand)]" : "bg-[var(--paper-strong)]"
-                        }`}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-5">
-            {active.steps.concat(active.reviewItems[0]).slice(0, 5).map((step) => (
-              <div
-                key={step}
-                className="site-soft-panel rounded-[18px] px-4 py-5 text-sm font-medium leading-6 text-[var(--ink)]"
-              >
-                {step}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {active.reviewItems.map((item) => (
+              <div key={item} className="rounded-[24px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.62)] px-5 py-5 text-sm leading-7 text-[var(--ink)]">
+                {item}
               </div>
             ))}
           </div>
-
-          <p className="mt-6 text-center text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-            {active.label === "Upload"
-              ? "Publish benchmark evidence without leaving the site."
-              : "Your benchmark becomes a public product surface instantly."}
-          </p>
         </div>
       </div>
     </div>

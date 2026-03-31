@@ -42,12 +42,12 @@ const columns = [
 
 export function SiteFooter() {
   return (
-    <footer className="site-shell pb-12 pt-4">
-      <div className="site-soft-panel rounded-[34px] border border-[var(--line)] px-7 py-8 md:px-10">
-        <div className="grid gap-10 lg:grid-cols-[1.1fr_2fr]">
+    <footer className="site-shell pb-12 pt-8">
+      <div className="border-t border-[rgba(185,174,195,0.46)] px-2 pt-10">
+        <div className="grid gap-10 lg:grid-cols-[1.05fr_1.95fr]">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--paper-strong)] text-lg font-semibold text-[var(--ink)]">
+              <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[var(--ink)] font-[var(--font-serif)] text-lg font-semibold text-white">
                 W
               </div>
               <div>
@@ -55,14 +55,16 @@ export function SiteFooter() {
                   WorldModel <span className="brand-accent">Gym</span>
                 </p>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Factory-ready benchmark surfaces
+                  Editorial benchmark platform
                 </p>
               </div>
             </div>
-            <p className="mt-6 text-lg font-semibold text-[var(--ink)]">Build research demos that look finished.</p>
-            <p className="mt-4 max-w-sm text-sm leading-7 text-[var(--muted)]">
-              WorldModel Gym brings benchmark design, run upload, traces, and public leaderboard presentation into one
-              clean product surface.
+            <p className="mt-6 max-w-md font-[var(--font-serif)] text-4xl leading-none text-[var(--ink)]">
+              Benchmark software that reads like a finished product launch.
+            </p>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-[var(--muted)]">
+              WorldModel Gym brings task design, uploads, traces, and leaderboards into one calm public surface for
+              research teams and portfolio-grade demos.
             </p>
             <p className="mt-8 text-sm italic text-[var(--muted)]">
               “Good benchmark software should feel as intentional as the paper it supports.”
@@ -99,7 +101,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-[var(--line)] pt-6 text-sm text-[var(--muted)]">
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-[rgba(185,174,195,0.46)] pt-6 text-sm text-[var(--muted)]">
           <p>© 2026 WorldModel Gym. Built for research, demos, and portfolio-grade engineering.</p>
           <div className="flex flex-wrap gap-5">
             <a className="footer-link" href="https://github.com/biru-codeastromer/WorldModel-Gym" rel="noreferrer" target="_blank">

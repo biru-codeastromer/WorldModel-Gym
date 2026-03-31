@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
@@ -104,47 +105,67 @@ function UploadStudio() {
   }
 
   return (
-    <section className="space-y-8">
-      <section className="border-b border-t border-[var(--line)] py-10">
-        <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
-          <div>
-            <p className="section-kicker">Upload studio</p>
-            <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.06] tracking-[-0.05em] text-[var(--ink)]">
-              Publish a run through the browser, while keeping API and CLI workflows intact.
-            </h1>
-            <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--muted)]">
-              Create the run record, attach artifacts, and jump straight into the live leaderboard. If your lab prefers
-              scripts, the API and CLI commands stay visible here too.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/leaderboard" className="button-secondary px-5 py-3 text-sm font-semibold">
-                Compare Current Runs
-              </Link>
-              <Link href="/tasks" className="button-secondary px-5 py-3 text-sm font-semibold">
-                Browse Benchmark Tasks
-              </Link>
-            </div>
+    <section className="space-y-12 pb-8">
+      <section className="grid gap-12 border-b border-[rgba(185,174,195,0.46)] pb-16 pt-8 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="max-w-xl">
+          <p className="section-kicker">Upload studio</p>
+          <h1 className="mt-8 font-[var(--font-serif)] text-6xl font-medium leading-[0.92] tracking-[-0.04em] text-[var(--ink)] md:text-7xl">
+            Publish real runs from the browser without losing your API and CLI workflow.
+          </h1>
+          <p className="mt-6 text-lg leading-8 text-[var(--muted)]">
+            Create the run record, attach artifacts, and jump into the live leaderboard. If your lab prefers
+            automation, the exact curl and CLI path stays visible right beside the form.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/leaderboard" className="button-secondary px-5 py-3 text-sm font-semibold">
+              Compare Current Runs
+            </Link>
+            <Link href="/tasks" className="button-secondary px-5 py-3 text-sm font-semibold">
+              Browse Benchmark Tasks
+            </Link>
           </div>
+        </div>
 
-          <div className="site-panel paper-matrix rounded-[30px] p-6">
-            <div className="grid gap-3 md:grid-cols-2">
-              {[
-                "Browser uploads for quick demos",
-                "API key auth with live publish",
-                "Optional trace and config artifacts",
-                "CLI and curl snippets for automation"
-              ].map((item) => (
-                <div key={item} className="site-soft-panel rounded-[18px] px-4 py-5 text-sm font-medium leading-6 text-[var(--ink)]">
-                  {item}
+        <div className="image-frame relative overflow-visible p-4">
+          <div className="absolute -left-8 top-10 hidden h-[54%] w-[32%] rounded-[28px] border border-[rgba(61,104,220,0.38)] bg-[rgba(220,229,255,0.22)] lg:block" />
+          <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="relative aspect-[1/1.02] overflow-hidden rounded-[28px]">
+              <Image
+                src="/editorial/team-thirdman.jpg"
+                alt="Team collaborating over metrics"
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 32vw"
+              />
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.78)] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">What ships here</p>
+                <div className="mt-4 space-y-3 text-sm leading-7 text-[var(--ink)]">
+                  <p>Run metadata creation</p>
+                  <p>Metrics, trace, and config attachment</p>
+                  <p>Immediate leaderboard publishing</p>
+                  <p>Companion API and CLI examples</p>
                 </div>
-              ))}
+              </div>
+              <div className="relative aspect-[1/0.68] overflow-hidden rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-3">
+                <div className="relative h-full w-full overflow-hidden rounded-[20px]">
+                  <Image
+                    src="/editorial/chart-rdne.jpg"
+                    alt="Research chart visual"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 20vw"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
-        <form onSubmit={handleSubmit} className="site-panel rounded-[30px] p-6 md:p-8">
+      <div className="grid gap-10 xl:grid-cols-[1.04fr_0.96fr]">
+        <form onSubmit={handleSubmit} className="rounded-[32px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.78)] px-6 py-8 shadow-[0_22px_54px_rgba(33,24,43,0.06)] md:px-8">
           <div className="grid gap-5 md:grid-cols-2">
             <label className="block md:col-span-2">
               <span className="text-sm font-semibold text-[var(--ink)]">Writer API Key</span>
@@ -153,7 +174,7 @@ function UploadStudio() {
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
                 placeholder="wmg_..."
-                className="mt-2 w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--line-strong)]"
+                className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
               />
             </label>
 
@@ -162,7 +183,7 @@ function UploadStudio() {
               <select
                 value={form.env}
                 onChange={(event) => setForm((current) => ({ ...current, env: event.target.value }))}
-                className="mt-2 w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--line-strong)]"
+                className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
               >
                 {envOptions.map((option) => (
                   <option key={option} value={option}>
@@ -177,7 +198,7 @@ function UploadStudio() {
               <select
                 value={form.agent}
                 onChange={(event) => setForm((current) => ({ ...current, agent: event.target.value }))}
-                className="mt-2 w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--line-strong)]"
+                className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
               >
                 {agentOptions.map((option) => (
                   <option key={option} value={option}>
@@ -192,7 +213,7 @@ function UploadStudio() {
               <select
                 value={form.track}
                 onChange={(event) => setForm((current) => ({ ...current, track: event.target.value }))}
-                className="mt-2 w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--line-strong)]"
+                className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
               >
                 {trackOptions.map((option) => (
                   <option key={option} value={option}>
@@ -209,7 +230,7 @@ function UploadStudio() {
                 value={form.id ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, id: event.target.value }))}
                 placeholder="Leave blank to auto-generate"
-                className="mt-2 w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--line-strong)]"
+                className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
               />
             </label>
 
@@ -219,7 +240,7 @@ function UploadStudio() {
                 type="file"
                 accept=".json,application/json"
                 onChange={(event) => setMetricsFile(event.target.files?.[0] ?? null)}
-                className="mt-2 block w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)]"
+                className="mt-2 block w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)]"
               />
             </label>
 
@@ -229,7 +250,7 @@ function UploadStudio() {
                 type="file"
                 accept=".jsonl,.txt,application/json"
                 onChange={(event) => setTraceFile(event.target.files?.[0] ?? null)}
-                className="mt-2 block w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)]"
+                className="mt-2 block w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)]"
               />
             </label>
 
@@ -239,19 +260,19 @@ function UploadStudio() {
                 type="file"
                 accept=".yaml,.yml,.json,.txt,text/plain,application/json"
                 onChange={(event) => setConfigFile(event.target.files?.[0] ?? null)}
-                className="mt-2 block w-full rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 text-sm text-[var(--ink)]"
+                className="mt-2 block w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)]"
               />
             </label>
           </div>
 
           {error ? (
-            <div className="mt-5 rounded-[18px] border border-[#d8a06f] bg-[#fff0e3] px-4 py-4 text-sm text-[#7a4a24]">
+            <div className="mt-5 rounded-[20px] border border-[rgba(216,160,111,0.62)] bg-[#fff0e3] px-4 py-4 text-sm text-[#7a4a24]">
               {error}
             </div>
           ) : null}
 
           {result ? (
-            <div className="mt-5 rounded-[18px] border border-[#a6c8a0] bg-[#eef7ea] px-4 py-4 text-sm text-[#355b2f]">
+            <div className="mt-5 rounded-[20px] border border-[rgba(166,200,160,0.8)] bg-[#eef7ea] px-4 py-4 text-sm text-[#355b2f]">
               Run <span className="font-mono">{result.id}</span> published successfully.
               <div className="mt-3 flex flex-wrap gap-3">
                 <Link href={`/runs/${result.id}`} className="button-primary px-4 py-3 text-sm font-semibold">
@@ -278,35 +299,35 @@ function UploadStudio() {
           </div>
         </form>
 
-        <div className="space-y-6">
-          <div className="site-panel rounded-[30px] p-6">
+        <div className="space-y-8">
+          <div className="rounded-[32px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.72)] px-6 py-8 shadow-[0_18px_48px_rgba(33,24,43,0.06)]">
             <p className="section-kicker">API / CLI</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-              Keep your automation workflows next to the browser upload path.
+            <h2 className="mt-6 font-[var(--font-serif)] text-4xl leading-[1.04] text-[var(--ink)]">
+              Keep automation next to the browser upload path.
             </h2>
-            <div className="mt-5 space-y-4">
+            <div className="mt-6 space-y-5">
               <div>
                 <p className="text-sm font-semibold text-[var(--ink)]">curl</p>
-                <pre className="mt-2 overflow-x-auto rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4 text-xs leading-6 text-[var(--ink)]">
+                <pre className="mt-2 overflow-x-auto rounded-[22px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.82)] p-4 text-xs leading-6 text-[var(--ink)]">
                   {curlSnippet}
                 </pre>
               </div>
               <div>
                 <p className="text-sm font-semibold text-[var(--ink)]">CLI helper</p>
-                <pre className="mt-2 overflow-x-auto rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4 text-xs leading-6 text-[var(--ink)]">
+                <pre className="mt-2 overflow-x-auto rounded-[22px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.82)] p-4 text-xs leading-6 text-[var(--ink)]">
                   {pythonSnippet}
                 </pre>
               </div>
             </div>
           </div>
 
-          <div className="site-soft-panel rounded-[28px] p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Upload checklist</p>
-            <ul className="mt-4 space-y-3 text-sm leading-7 text-[var(--ink)]">
+          <div className="rounded-[30px] border border-[rgba(185,174,195,0.42)] bg-[rgba(241,231,222,0.72)] px-6 py-7">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Upload checklist</p>
+            <ul className="mt-5 space-y-3 text-sm leading-7 text-[var(--ink)]">
               <li>Use a writer API key with the `runs:write` scope.</li>
               <li>Attach `metrics.json` for every run. Trace and config are optional but recommended.</li>
               <li>Use the optional run ID only if you need deterministic naming from an external pipeline.</li>
-              <li>After publish, verify the run on the live leaderboard and open the run detail page.</li>
+              <li>After publish, verify the run on the leaderboard and open the run detail page.</li>
             </ul>
           </div>
         </div>
@@ -319,7 +340,7 @@ export default function UploadPage() {
   return (
     <Suspense
       fallback={
-        <section className="site-panel rounded-[30px] p-8">
+        <section className="rounded-[30px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.68)] p-8">
           <p className="text-sm font-medium text-[var(--muted)]">Loading upload studio...</p>
         </section>
       }

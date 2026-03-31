@@ -10,7 +10,7 @@ const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   variable: "--font-serif",
-  weight: ["600", "700"]
+  weight: ["400", "500", "600", "700"]
 });
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
 
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${manrope.variable} ${cormorant.variable} ${plexMono.variable}`}>
-      <body className="font-[var(--font-sans)]">
+      <body className="font-[var(--font-sans)] text-[var(--ink)]">
         <Providers>
           <Nav />
           <main className="site-shell pt-8">{children}</main>

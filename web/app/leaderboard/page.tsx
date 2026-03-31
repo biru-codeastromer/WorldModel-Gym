@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,43 +22,67 @@ export default function LeaderboardPage() {
   const fastestPlanner = rows.length > 0 ? Math.min(...rows.map((row) => row.planning_cost_ms_per_step)) : 0;
 
   return (
-    <section className="space-y-8">
-      <section className="border-b border-t border-[var(--line)] py-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="section-kicker">Leaderboard</p>
-            <h2 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.06] tracking-[-0.05em] text-[var(--ink)]">
-              Track planning quality with the same finish as a product launch page.
-            </h2>
-            <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--muted)]">
-              Compare runs by success rate, return, and per-step planning cost across reproducible benchmark tracks.
-            </p>
+    <section className="space-y-12 pb-8">
+      <section className="grid gap-12 border-b border-[rgba(185,174,195,0.46)] pb-16 pt-8 lg:grid-cols-[0.88fr_1.12fr]">
+        <div className="max-w-xl">
+          <p className="section-kicker">Leaderboards</p>
+          <h1 className="mt-8 font-[var(--font-serif)] text-6xl font-medium leading-[0.92] tracking-[-0.04em] text-[var(--ink)] md:text-7xl">
+            Rigorous benchmark rankings, not cherry-picked result slides.
+          </h1>
+          <p className="mt-6 text-lg leading-8 text-[var(--muted)]">
+            Compare planning quality, return, and per-step cost across live benchmark tracks, then jump directly into
+            the run that produced each row.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <span className="stat-chip">{rows.length} live runs</span>
+            <span className="stat-chip">Best success {topSuccess.toFixed(2)}</span>
+            <span className="stat-chip">
+              Fastest {rows.length > 0 ? `${fastestPlanner.toFixed(2)} ms/step` : "--"}
+            </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="site-panel rounded-[22px] px-5 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Runs</p>
-              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">{rows.length}</p>
+        </div>
+
+        <div className="image-frame relative overflow-visible p-4">
+          <div className="absolute left-10 top-8 hidden h-[58%] w-[32%] rounded-[30px] border border-[rgba(61,104,220,0.4)] bg-[rgba(220,229,255,0.22)] lg:block" />
+          <div className="grid gap-4 lg:grid-cols-[0.96fr_1.04fr]">
+            <div className="relative aspect-[0.88/1] overflow-hidden rounded-[28px]">
+              <Image
+                src="/editorial/market-pixabay.jpg"
+                alt="Market data board representing live benchmark comparison"
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 30vw"
+              />
             </div>
-            <div className="site-panel rounded-[22px] px-5 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Best Success</p>
-              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">{topSuccess.toFixed(2)}</p>
-            </div>
-            <div className="site-panel rounded-[22px] px-5 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">Fastest Cost</p>
-              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-                {rows.length > 0 ? fastestPlanner.toFixed(2) : "--"}
-              </p>
+            <div className="space-y-4">
+              <div className="rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.78)] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Read the signal</p>
+                <p className="mt-4 font-[var(--font-serif)] text-3xl leading-[1.08] text-[var(--ink)]">
+                  Switch tracks, compare runs, and inspect evidence without leaving the site.
+                </p>
+              </div>
+              <div className="relative aspect-[1/0.66] overflow-hidden rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-3">
+                <div className="relative h-full w-full overflow-hidden rounded-[20px]">
+                  <Image
+                    src="/editorial/chart-rdne.jpg"
+                    alt="Soft research chart inset"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 20vw"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-3 md:grid-cols-3">
+      <div className="flex flex-wrap gap-6 border-b border-[rgba(185,174,195,0.46)] pb-3">
         {tracks.map((item) => (
           <button
             key={item}
             onClick={() => setTrack(item)}
-            className={`eyebrow-tab ${track === item ? "is-active" : ""}`}
+            className={`eyebrow-tab px-0 pb-3 text-left text-base ${track === item ? "is-active" : ""}`}
           >
             {item}
           </button>
@@ -65,33 +90,26 @@ export default function LeaderboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="site-panel rounded-[30px] p-6">
-          <p className="text-sm font-medium text-[var(--muted)]">Loading leaderboard signals...</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
-            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
-            <div className="h-28 animate-pulse rounded-[22px] bg-[var(--sand)]" />
-          </div>
+        <div className="space-y-4">
+          <div className="h-56 animate-pulse rounded-[30px] bg-[rgba(255,255,255,0.6)]" />
+          <div className="h-72 animate-pulse rounded-[30px] bg-[rgba(255,255,255,0.55)]" />
         </div>
       ) : null}
 
       {isError ? (
-        <div className="rounded-[30px] border border-[var(--line-strong)] bg-[#f8ede1] p-6">
+        <div className="rounded-[30px] border border-[rgba(215,160,111,0.62)] bg-[#fff1e4] p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9b6b40]">Live API unavailable</p>
-          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-[#4e3218]">
-            The frontend theme is live, but the backend URL is not serving leaderboard data.
+          <h3 className="mt-4 font-[var(--font-serif)] text-4xl leading-[1.04] text-[#4e3218]">
+            The leaderboard surface is live, but the backend is not serving results right now.
           </h3>
-          <p className="mt-4 text-base leading-7 text-[#7c5330]">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-[#7c5330]">
             {error instanceof Error ? error.message : "Failed to load leaderboard data."}
           </p>
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-wrap gap-3">
             <Link href="/" className="button-primary px-5 py-3 text-sm font-semibold">
               Back to Home
             </Link>
-            <Link
-              href="/tasks"
-              className="button-secondary px-5 py-3 text-sm font-semibold"
-            >
+            <Link href="/tasks" className="button-secondary px-5 py-3 text-sm font-semibold">
               Browse Tasks Instead
             </Link>
           </div>
@@ -99,13 +117,13 @@ export default function LeaderboardPage() {
       ) : null}
 
       {!isLoading && !isError && rows.length === 0 ? (
-        <div className="site-panel rounded-[30px] border border-dashed border-[var(--line-strong)] p-10 text-center">
+        <div className="rounded-[30px] border border-dashed border-[rgba(185,174,195,0.72)] bg-[rgba(255,255,255,0.6)] px-8 py-12 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">No runs yet</p>
-          <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+          <h3 className="mt-4 font-[var(--font-serif)] text-4xl leading-[1.04] text-[var(--ink)]">
             This track is waiting for its first uploaded evaluation.
           </h3>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-            Run the demo pipeline or upload benchmark artifacts to populate charts, rankings, and individual run views.
+            Publish through the browser upload flow or the API/CLI helper to populate rankings, charts, and run pages.
           </p>
         </div>
       ) : null}
@@ -113,31 +131,31 @@ export default function LeaderboardPage() {
       {rows.length > 0 ? (
         <>
           <LeaderboardChart data={rows} />
-          <div className="site-panel overflow-x-auto rounded-[30px] p-5">
+          <div className="overflow-x-auto border-t border-[rgba(185,174,195,0.46)] pt-6">
             <table className="w-full min-w-[780px] text-left text-sm">
               <thead className="text-[var(--muted)]">
-                <tr className="border-b border-[var(--line)]">
-                  <th className="py-2">Run</th>
-                  <th className="py-2">Env</th>
-                  <th className="py-2">Agent</th>
-                  <th className="py-2">Success</th>
-                  <th className="py-2">Return</th>
-                  <th className="py-2">Cost (ms/step)</th>
+                <tr className="border-b border-[rgba(185,174,195,0.42)]">
+                  <th className="py-3">Run</th>
+                  <th className="py-3">Env</th>
+                  <th className="py-3">Agent</th>
+                  <th className="py-3">Success</th>
+                  <th className="py-3">Return</th>
+                  <th className="py-3">Cost (ms/step)</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, index) => (
-                  <tr key={row.run_id} className="border-b border-[var(--line)]/70 last:border-b-0">
-                    <td className="py-3 font-mono text-xs">
-                      <Link className="text-[var(--ink)] underline-offset-4 hover:underline" href={`/runs/${row.run_id}`}>
+                  <tr key={row.run_id} className="border-b border-[rgba(185,174,195,0.34)] last:border-b-0">
+                    <td className="py-4 font-mono text-xs">
+                      <Link className="editorial-link font-[var(--font-mono)] text-[var(--ink)]" href={`/runs/${row.run_id}`}>
                         #{index + 1} {row.run_id}
                       </Link>
                     </td>
-                    <td className="py-3">{row.env}</td>
-                    <td className="py-3">{row.agent}</td>
-                    <td className="py-3">{row.success_rate.toFixed(2)}</td>
-                    <td className="py-3">{row.mean_return.toFixed(2)}</td>
-                    <td className="py-3">{row.planning_cost_ms_per_step.toFixed(2)}</td>
+                    <td className="py-4">{row.env}</td>
+                    <td className="py-4">{row.agent}</td>
+                    <td className="py-4">{row.success_rate.toFixed(2)}</td>
+                    <td className="py-4">{row.mean_return.toFixed(2)}</td>
+                    <td className="py-4">{row.planning_cost_ms_per_step.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
