@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { fetchTasks, TaskRecord } from "@/lib/api";
 
 const curatedTasks: TaskRecord[] = [
@@ -33,6 +35,20 @@ export default async function TasksPage() {
         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-[var(--font-mono)] text-xs leading-6 text-[var(--ink)]">
           {JSON.stringify(task.defaults ?? {}, null, 2)}
         </pre>
+      </div>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Link
+          href={`/upload?env=${encodeURIComponent(task.id)}&track=test`}
+          className="button-primary px-4 py-3 text-sm font-semibold"
+        >
+          Upload Run
+        </Link>
+        <Link
+          href="/leaderboard"
+          className="button-secondary px-4 py-3 text-sm font-semibold"
+        >
+          Compare on Leaderboard
+        </Link>
       </div>
     </article>
   );

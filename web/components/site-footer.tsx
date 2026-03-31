@@ -7,6 +7,7 @@ const columns = [
       { label: "Homepage", href: "/" },
       { label: "Tasks", href: "/tasks" },
       { label: "Leaderboard", href: "/leaderboard" },
+      { label: "Upload", href: "/upload" },
       { label: "GitHub Repo", href: "https://github.com/biru-codeastromer/WorldModel-Gym" }
     ]
   },

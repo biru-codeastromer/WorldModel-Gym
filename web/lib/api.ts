@@ -35,6 +35,13 @@ export type RunResponse = {
   config_url?: string | null;
 };
 
+export type RunCreatePayload = {
+  id?: string;
+  env: string;
+  agent: string;
+  track: string;
+};
+
 async function fetchJson<T>(path: string): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -56,6 +63,22 @@ async function fetchJson<T>(path: string): Promise<T> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body?.detail) {
+        message = body.detail;
+      }
+    } catch {
+      // ignore secondary parse failures
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as T;
 }
 
 export async function fetchTasks() {
@@ -80,4 +103,46 @@ export async function fetchTrace(runId: string) {
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+export async function createRun(payload: RunCreatePayload, apiKey: string) {
+  const res = await fetch(`${getApiBase()}/api/runs`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return parseJsonResponse<RunResponse>(res);
+}
+
+export async function uploadRunArtifacts(
+  runId: string,
+  files: {
+    metricsFile: File;
+    traceFile?: File | null;
+    configFile?: File | null;
+  },
+  apiKey: string
+) {
+  const body = new FormData();
+  body.append("metrics_file", files.metricsFile);
+  if (files.traceFile) {
+    body.append("trace_file", files.traceFile);
+  }
+  if (files.configFile) {
+    body.append("config_file", files.configFile);
+  }
+
+  const res = await fetch(`${getApiBase()}/api/runs/${runId}/upload`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey
+    },
+    body
+  });
+
+  return parseJsonResponse<RunResponse>(res);
 }

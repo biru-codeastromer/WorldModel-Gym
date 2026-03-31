@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { WorkflowShowcase } from "@/components/workflow-showcase";
+
 const signalCards = [
   {
     title: "Prompt-driven benchmark creation",
@@ -19,21 +21,6 @@ const agenticFlow = [
   "Design reproducible tasks with deterministic seeds and explicit budgets.",
   "Run planning agents against sparse rewards and partial observability.",
   "Publish traces, returns, and planning cost in a polished public benchmark."
-];
-
-const benchmarkTabs = [
-  "Create",
-  "Evaluate",
-  "Upload",
-  "Compare"
-];
-
-const benchmarkSteps = [
-  "Prompt-based world specification",
-  "Reference traces and task defaults",
-  "Multi-view metric summaries",
-  "Leaderboards per track",
-  "Run-level trace inspection"
 ];
 
 const manufacturerGrid = [
@@ -70,10 +57,10 @@ export default function HomePage() {
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/leaderboard"
+              href="/upload"
               className="button-primary px-8 py-4 text-sm font-semibold"
             >
-              Start Exploring
+              Open Upload Studio
             </Link>
             <Link
               href="/tasks"
@@ -190,61 +177,7 @@ export default function HomePage() {
           <h2 className="max-w-4xl text-5xl font-semibold leading-[1.08] tracking-[-0.05em] text-[var(--ink)]">
             Benchmark agents in the speed of modern product design.
           </h2>
-
-          <div className="mt-8 grid grid-cols-2 md:grid-cols-4">
-            {benchmarkTabs.map((tab, index) => (
-              <div key={tab} className={`eyebrow-tab ${index === 0 ? "is-active" : ""}`}>
-                {tab}
-              </div>
-            ))}
-          </div>
-
-          <div className="site-panel paper-matrix rounded-b-[34px] rounded-t-none p-6 md:p-10">
-            <div className="rounded-[28px] border border-[var(--line)] bg-[var(--paper-strong)] p-6 md:p-10">
-              <h3 className="text-center text-4xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-                From idea to multi-view benchmark concept
-              </h3>
-              <div className="mx-auto mt-8 max-w-3xl rounded-[28px] border border-[var(--line)] bg-white p-5 shadow-[0_24px_60px_rgba(38,28,16,0.08)]">
-                <div className="h-[280px] rounded-[20px] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(250,248,244,0.96),rgba(244,236,226,0.98))]">
-                  <div className="grid h-full grid-cols-[0.85fr_1.15fr_0.75fr] gap-4 p-5">
-                    <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Prompt</p>
-                      <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-                        Define a partially observable task with delayed reward and explicit planning budget.
-                      </p>
-                    </div>
-                    <div className="rounded-[18px] border border-[var(--line)] bg-[radial-gradient(circle_at_top,rgba(190,170,145,0.18),transparent_32%),#fffdfa] p-4">
-                      <div className="grid h-full grid-cols-2 gap-3">
-                        <div className="rounded-[16px] border border-[var(--line)] bg-[var(--sand)]" />
-                        <div className="rounded-[16px] border border-[var(--line)] bg-[var(--paper)]" />
-                        <div className="rounded-[16px] border border-[var(--line)] bg-[var(--paper)]" />
-                        <div className="rounded-[16px] border border-[var(--line)] bg-[var(--sand)]" />
-                      </div>
-                    </div>
-                    <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Review</p>
-                      <div className="mt-3 space-y-3">
-                        <div className="h-14 rounded-[14px] border border-[var(--line)] bg-[var(--sand)]" />
-                        <div className="h-20 rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)]" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-3 md:grid-cols-5">
-                {benchmarkSteps.map((step) => (
-                  <div key={step} className="site-soft-panel rounded-[18px] px-4 py-5 text-sm font-medium leading-6 text-[var(--ink)]">
-                    {step}
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-6 text-center text-3xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-                Your benchmark becomes a public product surface instantly.
-              </p>
-            </div>
-          </div>
+          <WorkflowShowcase />
         </div>
       </section>
 
@@ -279,7 +212,9 @@ export default function HomePage() {
               <div className="flex-1 text-sm text-[#9a9287]">
                 Compare planning cost and success rate across benchmark tracks with reproducible seeds...
               </div>
-              <div className="button-secondary whitespace-nowrap px-4 py-3 text-sm font-semibold">Ask now</div>
+              <Link href="/upload" className="button-secondary whitespace-nowrap px-4 py-3 text-sm font-semibold">
+                Open upload
+              </Link>
             </div>
             <p className="mt-4 text-center text-sm text-[var(--muted)]">
               Replace brittle demo prep with one polished benchmark narrative.
@@ -356,9 +291,14 @@ export default function HomePage() {
             <p className="mt-3 text-center text-base leading-7 text-[var(--muted)]">
               Join the future of benchmark creation with AI-assisted task design and public evaluation tools.
             </p>
-            <div className="mt-6 rounded-[16px] border border-[var(--line)] px-4 py-4 text-center text-sm font-semibold text-[var(--ink)]">
+            <a
+              href="https://github.com/biru-codeastromer/WorldModel-Gym"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 block rounded-[16px] border border-[var(--line)] px-4 py-4 text-center text-sm font-semibold text-[var(--ink)] transition hover:bg-[var(--paper)]"
+            >
               Continue with GitHub
-            </div>
+            </a>
             <div className="mt-6 text-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
               or
             </div>
@@ -372,9 +312,9 @@ export default function HomePage() {
                 </label>
               ))}
             </div>
-            <div className="button-primary mt-6 w-full px-6 py-4 text-center text-sm font-semibold">
+            <Link href="/upload" className="button-primary mt-6 block w-full px-6 py-4 text-center text-sm font-semibold">
               Request Research Access
-            </div>
+            </Link>
           </div>
         </div>
       </section>

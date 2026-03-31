@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "Overview" },
   { href: "/tasks", label: "Tasks" },
-  { href: "/leaderboard", label: "Leaderboard" }
+  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/upload", label: "Upload" }
 ];
 
 export function Nav() {
@@ -40,7 +41,7 @@ export function Nav() {
             </Link>
           ))}
           <Link
-            href="/leaderboard"
+            href="/upload"
             className="button-primary px-5 py-3 text-sm font-semibold"
           >
             Get Started
@@ -55,7 +56,7 @@ export function Nav() {
           </a>
         </nav>
 
-        <Link href="/leaderboard" className="button-primary px-4 py-3 text-sm font-semibold md:hidden">
+        <Link href="/upload" className="button-primary px-4 py-3 text-sm font-semibold md:hidden">
           Start
         </Link>
       </div>
