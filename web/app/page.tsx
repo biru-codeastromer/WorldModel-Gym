@@ -68,45 +68,37 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="relative">
-            <div className="image-frame relative overflow-visible p-5">
-              <div className="absolute -left-10 top-10 hidden h-[62%] w-[42%] rounded-[32px] border border-[rgba(61,104,220,0.4)] bg-[rgba(220,229,255,0.24)] lg:block" />
-              <div className="absolute -right-8 bottom-8 hidden h-[50%] w-[36%] rounded-[32px] border border-[rgba(244,216,202,0.72)] bg-[rgba(244,216,202,0.28)] lg:block" />
-              <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="relative aspect-[0.95/1.08] overflow-hidden rounded-[30px]">
-                  <Image
-                    src="/editorial/hero-goumbik.jpg"
-                    alt="Desk with benchmark notes and chart printouts"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 40vw"
-                    priority
-                  />
-                </div>
-                <div className="flex flex-col justify-between gap-5">
-                  <div className="rounded-[28px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-                      Benchmark narrative
-                    </p>
-                    <p className="mt-4 font-[var(--font-serif)] text-3xl leading-[1.08] text-[var(--ink)]">
-                      Build a benchmark surface that communicates as well as the experiment itself.
-                    </p>
-                  </div>
-                  <div className="relative overflow-hidden rounded-[28px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-3">
-                    <div className="relative aspect-[1/1] overflow-hidden rounded-[22px]">
-                      <Image
-                        src="/editorial/chart-rdne.jpg"
-                        alt="Close-up market research chart"
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 1024px) 100vw, 22vw"
-                      />
-                    </div>
-                  </div>
-                </div>
+          <div className="relative grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="relative aspect-[0.95/1.08] overflow-hidden rounded-[30px]">
+              <Image
+                src="/editorial/hero-goumbik.jpg"
+                alt="Desk with benchmark notes and chart printouts"
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 40vw"
+                priority
+              />
+            </div>
+            <div className="flex flex-col justify-between gap-8 pt-2">
+              <div className="max-w-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">
+                  Benchmark narrative
+                </p>
+                <p className="mt-5 font-[var(--font-serif)] text-4xl leading-[1.02] text-[var(--ink)]">
+                  Build a benchmark surface that communicates as well as the experiment itself.
+                </p>
+              </div>
+              <div className="relative aspect-[1/0.92] overflow-hidden rounded-[28px]">
+                <Image
+                  src="/editorial/chart-rdne.jpg"
+                  alt="Close-up market research chart"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 24vw"
+                />
               </div>
             </div>
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="lg:col-span-2 mt-1 flex flex-wrap gap-6 border-t border-[rgba(185,174,195,0.4)] pt-4">
               <span className="stat-chip">FastAPI + Postgres + S3</span>
               <span className="stat-chip">Next.js App Router</span>
               <span className="stat-chip">Real runs live in production</span>
@@ -135,16 +127,14 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="image-frame p-4">
-            <div className="relative aspect-[1.1/0.95] overflow-hidden rounded-[28px]">
-              <Image
-                src="/editorial/team-thirdman.jpg"
-                alt="Team working over charts and data"
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 38vw"
-              />
-            </div>
+          <div className="relative aspect-[1.1/0.95] overflow-hidden rounded-[28px]">
+            <Image
+              src="/editorial/team-thirdman.jpg"
+              alt="Team working over charts and data"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 38vw"
+            />
           </div>
           <div className="space-y-8">
             {surfaces.map((surface) => (
@@ -192,17 +182,14 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="image-frame relative p-5">
-          <div className="absolute left-8 top-8 hidden h-[64%] w-[36%] rounded-[32px] border border-[rgba(61,104,220,0.42)] bg-[rgba(220,229,255,0.22)] lg:block" />
-          <div className="relative aspect-[1.15/0.96] overflow-hidden rounded-[30px]">
-            <Image
-              src="/editorial/market-pixabay.jpg"
-              alt="Financial board visual suggesting live benchmark comparison"
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 44vw"
-            />
-          </div>
+        <div className="relative aspect-[1.15/0.96] overflow-hidden rounded-[30px]">
+          <Image
+            src="/editorial/market-pixabay.jpg"
+            alt="Financial board visual suggesting live benchmark comparison"
+            fill
+            className="object-cover"
+            sizes="(max-width: 1024px) 100vw, 44vw"
+          />
         </div>
       </section>
     </section>

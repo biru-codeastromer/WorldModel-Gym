@@ -42,36 +42,31 @@ export default function LeaderboardPage() {
           </div>
         </div>
 
-        <div className="image-frame relative overflow-visible p-4">
-          <div className="absolute left-10 top-8 hidden h-[58%] w-[32%] rounded-[30px] border border-[rgba(61,104,220,0.4)] bg-[rgba(220,229,255,0.22)] lg:block" />
-          <div className="grid gap-4 lg:grid-cols-[0.96fr_1.04fr]">
-            <div className="relative aspect-[0.88/1] overflow-hidden rounded-[28px]">
+        <div className="grid gap-6 lg:grid-cols-[0.96fr_1.04fr]">
+          <div className="relative aspect-[0.88/1] overflow-hidden rounded-[28px]">
+            <Image
+              src="/editorial/market-pixabay.jpg"
+              alt="Market data board representing live benchmark comparison"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 30vw"
+            />
+          </div>
+          <div className="space-y-6">
+            <div className="border-t border-[rgba(185,174,195,0.42)] pt-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Read the signal</p>
+              <p className="mt-4 font-[var(--font-serif)] text-3xl leading-[1.08] text-[var(--ink)]">
+                Switch tracks, compare runs, and inspect evidence without leaving the site.
+              </p>
+            </div>
+            <div className="relative aspect-[1/0.66] overflow-hidden rounded-[26px]">
               <Image
-                src="/editorial/market-pixabay.jpg"
-                alt="Market data board representing live benchmark comparison"
+                src="/editorial/chart-rdne.jpg"
+                alt="Soft research chart inset"
                 fill
                 className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 30vw"
+                sizes="(max-width: 1024px) 100vw, 20vw"
               />
-            </div>
-            <div className="space-y-4">
-              <div className="rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.78)] p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Read the signal</p>
-                <p className="mt-4 font-[var(--font-serif)] text-3xl leading-[1.08] text-[var(--ink)]">
-                  Switch tracks, compare runs, and inspect evidence without leaving the site.
-                </p>
-              </div>
-              <div className="relative aspect-[1/0.66] overflow-hidden rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-3">
-                <div className="relative h-full w-full overflow-hidden rounded-[20px]">
-                  <Image
-                    src="/editorial/chart-rdne.jpg"
-                    alt="Soft research chart inset"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 20vw"
-                  />
-                </div>
-              </div>
             </div>
           </div>
         </div>

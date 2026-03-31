@@ -184,10 +184,7 @@ a {
 
 .image-frame {
   overflow: hidden;
-  border: 1px solid rgba(185, 174, 195, 0.46);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--shadow);
 }
 
 .image-frame img {
@@ -198,12 +195,18 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(185, 174, 195, 0.5);
-  background: rgba(255, 255, 255, 0.74);
-  padding: 10px 16px;
+  padding: 0;
   font-size: 13px;
   color: var(--muted);
+}
+
+.stat-chip::before {
+  content: "";
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+  border-radius: 999px;
+  background: rgba(61, 104, 220, 0.8);
 }
 
 .footer-link {

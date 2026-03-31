@@ -170,11 +170,11 @@ export function WorkflowShowcase() {
                 {active.prompt}
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 border-t border-[rgba(185,174,195,0.42)] pt-5 md:grid-cols-3">
               {active.steps.map((step, index) => (
-                <div key={step} className={`${index === 1 ? "bg-[var(--sand)]" : "bg-[rgba(255,255,255,0.62)]"} rounded-[24px] border border-[rgba(185,174,195,0.42)] px-5 py-6`}>
+                <div key={step} className="px-1 py-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Step {index + 1}</p>
-                  <p className="mt-3 text-sm leading-7 text-[var(--ink)]">{step}</p>
+                  <p className="mt-3 max-w-[18rem] text-sm leading-7 text-[var(--ink)]">{step}</p>
                 </div>
               ))}
             </div>
@@ -182,22 +182,21 @@ export function WorkflowShowcase() {
         </div>
 
         <div className="space-y-5">
-          <div className="image-frame relative p-4">
-            <div className="relative aspect-[1.08/1] overflow-hidden rounded-[24px]">
+          <div className="grid gap-6 lg:grid-cols-[1.02fr_0.98fr]">
+            <div className="relative aspect-[1.04/1] overflow-hidden rounded-[28px]">
               <Image
                 src={active.imageSrc}
                 alt={active.imageAlt}
                 fill
                 className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
+                sizes="(max-width: 1024px) 100vw, 34vw"
               />
             </div>
-            <div className="absolute -left-4 top-8 hidden h-[68%] w-[46%] rounded-[28px] border border-[rgba(61,104,220,0.35)] bg-[rgba(220,229,255,0.28)] lg:block" />
-            <div className="absolute bottom-8 right-8 max-w-[220px] rounded-[24px] border border-[rgba(185,174,195,0.48)] bg-[rgba(255,255,255,0.86)] px-5 py-5 shadow-[0_16px_40px_rgba(33,24,43,0.08)]">
+            <div className="border-t border-[rgba(185,174,195,0.42)] pt-5">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">{active.reviewLabel}</p>
-              <div className="mt-4 space-y-3">
+              <div className="mt-5 space-y-4">
                 {active.reviewItems.map((item) => (
-                  <p key={item} className="border-b border-[rgba(185,174,195,0.34)] pb-3 text-sm leading-6 text-[var(--ink)] last:border-b-0 last:pb-0">
+                  <p key={item} className="border-b border-[rgba(185,174,195,0.3)] pb-4 text-sm leading-7 text-[var(--ink)] last:border-b-0 last:pb-0">
                     {item}
                   </p>
                 ))}
@@ -205,9 +204,9 @@ export function WorkflowShowcase() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 border-t border-[rgba(185,174,195,0.42)] pt-5 sm:grid-cols-3">
             {active.reviewItems.map((item) => (
-              <div key={item} className="rounded-[24px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.62)] px-5 py-5 text-sm leading-7 text-[var(--ink)]">
+              <div key={item} className="text-sm leading-7 text-[var(--ink)]">
                 {item}
               </div>
             ))}

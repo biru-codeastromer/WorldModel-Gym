@@ -126,39 +126,34 @@ function UploadStudio() {
           </div>
         </div>
 
-        <div className="image-frame relative overflow-visible p-4">
-          <div className="absolute -left-8 top-10 hidden h-[54%] w-[32%] rounded-[28px] border border-[rgba(61,104,220,0.38)] bg-[rgba(220,229,255,0.22)] lg:block" />
-          <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="relative aspect-[1/1.02] overflow-hidden rounded-[28px]">
+        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="relative aspect-[1/1.02] overflow-hidden rounded-[28px]">
+            <Image
+              src="/editorial/team-thirdman.jpg"
+              alt="Team collaborating over metrics"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 32vw"
+            />
+          </div>
+          <div className="space-y-6">
+            <div className="border-t border-[rgba(185,174,195,0.42)] pt-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">What ships here</p>
+              <div className="mt-4 space-y-3 text-sm leading-7 text-[var(--ink)]">
+                <p>Run metadata creation</p>
+                <p>Metrics, trace, and config attachment</p>
+                <p>Immediate leaderboard publishing</p>
+                <p>Companion API and CLI examples</p>
+              </div>
+            </div>
+            <div className="relative aspect-[1/0.68] overflow-hidden rounded-[26px]">
               <Image
-                src="/editorial/team-thirdman.jpg"
-                alt="Team collaborating over metrics"
+                src="/editorial/chart-rdne.jpg"
+                alt="Research chart visual"
                 fill
                 className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 32vw"
+                sizes="(max-width: 1024px) 100vw, 20vw"
               />
-            </div>
-            <div className="space-y-4">
-              <div className="rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.78)] p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">What ships here</p>
-                <div className="mt-4 space-y-3 text-sm leading-7 text-[var(--ink)]">
-                  <p>Run metadata creation</p>
-                  <p>Metrics, trace, and config attachment</p>
-                  <p>Immediate leaderboard publishing</p>
-                  <p>Companion API and CLI examples</p>
-                </div>
-              </div>
-              <div className="relative aspect-[1/0.68] overflow-hidden rounded-[26px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.74)] p-3">
-                <div className="relative h-full w-full overflow-hidden rounded-[20px]">
-                  <Image
-                    src="/editorial/chart-rdne.jpg"
-                    alt="Research chart visual"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 20vw"
-                  />
-                </div>
-              </div>
             </div>
           </div>
         </div>
