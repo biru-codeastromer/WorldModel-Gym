@@ -1,28 +1,29 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { IBM_Plex_Mono } from "next/font/google";
 
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
-const josefinSans = localFont({
+const cmuSerif = localFont({
   src: [
-    { path: "./fonts/JosefinSans-Light.ttf", weight: "300", style: "normal" },
-    { path: "./fonts/JosefinSans-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/JosefinSans-Medium.ttf", weight: "500", style: "normal" },
-    { path: "./fonts/JosefinSans-SemiBold.ttf", weight: "600", style: "normal" }
+    { path: "./fonts/CMUSerif-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/CMUSerif-Italic.ttf", weight: "400", style: "italic" },
+    { path: "./fonts/CMUSerif-Bold.ttf", weight: "700", style: "normal" }
   ],
-  variable: "--font-sans",
-  display: "swap"
-});
-const yesevaOne = localFont({
-  src: [{ path: "./fonts/YesevaOne-Regular.ttf", weight: "400", style: "normal" }],
   variable: "--font-serif",
   display: "swap"
 });
-const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
+const plexMono = localFont({
+  src: [
+    { path: "./fonts/IBMPlexMono-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/IBMPlexMono-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/IBMPlexMono-SemiBold.woff2", weight: "600", style: "normal" }
+  ],
+  variable: "--font-mono",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://world-model-gym.vercel.app"),
@@ -61,11 +62,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${josefinSans.variable} ${yesevaOne.variable} ${plexMono.variable}`}>
-      <body className="font-[var(--font-sans)] text-[var(--ink)]">
+    <html lang="en" className={`${cmuSerif.variable} ${plexMono.variable}`}>
+      <body className="text-[var(--ink)]">
         <Providers>
           <Nav />
-          <main className="site-shell pt-8">{children}</main>
+          <main className="site-shell pt-[108px] md:pt-[124px]">{children}</main>
           <SiteFooter />
         </Providers>
       </body>

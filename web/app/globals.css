@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --page: #faf7fc;
-  --page-soft: #f4eef4;
+  --page: #fef7ff;
+  --page-soft: #fdf7ff;
   --paper: #fffdfc;
   --paper-strong: #ffffff;
   --paper-muted: #f7f1eb;
@@ -32,28 +32,16 @@ html {
 
 body {
   margin: 0;
+  font-family: var(--font-serif);
   font-weight: 400;
-  letter-spacing: 0.005em;
   color: var(--ink);
-  background:
-    linear-gradient(to right, transparent 80px, rgba(185, 174, 195, 0.45) 80px, rgba(185, 174, 195, 0.45) 81px, transparent 81px, transparent calc(100% - 81px), rgba(185, 174, 195, 0.45) calc(100% - 81px), rgba(185, 174, 195, 0.45) calc(100% - 80px), transparent calc(100% - 80px)),
-    linear-gradient(180deg, var(--page) 0%, var(--page-soft) 48%, #f8f2ea 100%);
+  background: var(--page);
   min-height: 100vh;
   position: relative;
 }
 
 body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at top left, rgba(61, 104, 220, 0.08), transparent 24%),
-    radial-gradient(circle at top right, rgba(244, 216, 202, 0.3), transparent 28%),
-    radial-gradient(rgba(110, 98, 114, 0.14) 0.8px, transparent 0.8px);
-  background-size: auto, auto, 16px 16px;
-  opacity: 0.38;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 78%);
+  content: none;
 }
 
 ::selection {
@@ -68,8 +56,8 @@ a {
 .site-shell {
   margin: 0 auto;
   width: 100%;
-  max-width: 1260px;
-  padding: 0 28px 88px;
+  max-width: 1320px;
+  padding: 0 32px 96px;
 }
 
 .site-panel {
@@ -106,7 +94,7 @@ a {
   gap: 10px;
   font-family: var(--font-serif);
   font-size: 18px;
-  font-style: normal;
+  font-style: italic;
   font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--muted);
@@ -128,31 +116,33 @@ a {
 }
 
 .button-primary {
+  font-family: var(--font-mono);
   border-radius: 999px;
   background: var(--accent);
   color: #fffdfa;
-  box-shadow: 0 12px 24px rgba(61, 104, 220, 0.18);
-  transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
 .button-primary:hover,
 .button-secondary:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .button-primary:hover {
-  box-shadow: 0 16px 28px rgba(61, 104, 220, 0.24);
+  background: #2c56d1;
 }
 
 .button-secondary {
+  font-family: var(--font-mono);
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   background: rgba(255, 255, 255, 0.74);
   color: var(--ink);
-  transition: transform 160ms ease, border-color 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .eyebrow-tab {
+  font-family: var(--font-mono);
   border-bottom: 1px solid rgba(185, 174, 195, 0.5);
   padding: 16px 12px;
   text-align: center;
@@ -172,6 +162,7 @@ a {
 }
 
 .editorial-link {
+  font-family: var(--font-mono);
   color: var(--muted);
   text-decoration: underline;
   text-decoration-color: rgba(106, 100, 114, 0.45);
@@ -198,6 +189,7 @@ a {
   align-items: center;
   gap: 10px;
   padding: 0;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--muted);
 }
@@ -212,6 +204,7 @@ a {
 }
 
 .footer-link {
+  font-family: var(--font-mono);
   color: var(--muted);
   text-decoration: underline;
   text-decoration-color: rgba(106, 100, 114, 0.34);
@@ -224,10 +217,38 @@ a {
   text-decoration-color: rgba(29, 26, 36, 0.55);
 }
 
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(29, 26, 36, 0.58);
+  padding-bottom: 1px;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.nav-link:hover {
+  color: rgba(29, 26, 36, 0.72);
+  border-bottom-color: rgba(29, 26, 36, 0.34);
+}
+
+.nav-link.is-active {
+  border-bottom-color: rgba(29, 26, 36, 0.9);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-mono);
+}
+
 @media (max-width: 768px) {
   body {
-    background:
-      linear-gradient(180deg, var(--page) 0%, var(--page-soft) 52%, #f8f2ea 100%);
+    background: var(--page);
   }
 
   .site-shell {
