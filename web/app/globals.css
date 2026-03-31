@@ -32,6 +32,8 @@ html {
 
 body {
   margin: 0;
+  font-weight: 400;
+  letter-spacing: 0.005em;
   color: var(--ink);
   background:
     linear-gradient(to right, transparent 80px, rgba(185, 174, 195, 0.45) 80px, rgba(185, 174, 195, 0.45) 81px, transparent 81px, transparent calc(100% - 81px), rgba(185, 174, 195, 0.45) calc(100% - 81px), rgba(185, 174, 195, 0.45) calc(100% - 80px), transparent calc(100% - 80px)),
@@ -104,8 +106,8 @@ a {
   gap: 10px;
   font-family: var(--font-serif);
   font-size: 18px;
-  font-style: italic;
-  font-weight: 500;
+  font-style: normal;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--muted);
 }
@@ -121,8 +123,8 @@ a {
 
 .brand-accent {
   font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 600;
+  font-style: normal;
+  font-weight: 400;
 }
 
 .button-primary {

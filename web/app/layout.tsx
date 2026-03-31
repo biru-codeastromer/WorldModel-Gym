@@ -1,16 +1,26 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, IBM_Plex_Mono, Manrope } from "next/font/google";
+import localFont from "next/font/local";
+import { IBM_Plex_Mono } from "next/font/google";
 
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
+const josefinSans = localFont({
+  src: [
+    { path: "./fonts/JosefinSans-Light.ttf", weight: "300", style: "normal" },
+    { path: "./fonts/JosefinSans-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/JosefinSans-Medium.ttf", weight: "500", style: "normal" },
+    { path: "./fonts/JosefinSans-SemiBold.ttf", weight: "600", style: "normal" }
+  ],
+  variable: "--font-sans",
+  display: "swap"
+});
+const yesevaOne = localFont({
+  src: [{ path: "./fonts/YesevaOne-Regular.ttf", weight: "400", style: "normal" }],
   variable: "--font-serif",
-  weight: ["400", "500", "600", "700"]
+  display: "swap"
 });
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
 
@@ -51,7 +61,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${cormorant.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${josefinSans.variable} ${yesevaOne.variable} ${plexMono.variable}`}>
       <body className="font-[var(--font-sans)] text-[var(--ink)]">
         <Providers>
           <Nav />
