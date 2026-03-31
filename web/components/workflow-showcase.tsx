@@ -105,8 +105,8 @@ const tabs: WorkflowTab[] = [
     ],
     primaryHref: "/leaderboard",
     primaryLabel: "Compare Tracks",
-    secondaryHref: "/runs/0aadcb16fd8e",
-    secondaryLabel: "Inspect Live Run",
+    secondaryHref: "/upload?track=continual",
+    secondaryLabel: "Upload Comparison Run",
     imageSrc: "/editorial/chart-rdne.jpg",
     imageAlt: "Research chart in soft pink tones"
   }
