@@ -1,12 +1,23 @@
 from __future__ import annotations
 
-import copy
-
 import numpy as np
+import torch
 from worldmodel_models.registry import create_world_model
 from worldmodel_planners.mpc_cem import MPCCEMPlanner
 
 from worldmodel_agents.base import AgentConfig, BaseAgent
+
+
+def _clone_state(value):
+    if isinstance(value, torch.Tensor):
+        return value.detach().clone()
+    if isinstance(value, dict):
+        return {key: _clone_state(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clone_state(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_state(item) for item in value)
+    return value
 
 
 class ImaginationMPCAgent(BaseAgent):
@@ -40,7 +51,7 @@ class ImaginationMPCAgent(BaseAgent):
         result = self.planner.plan(
             root_state=self.latent,
             rollout_fn=rollout_fn,
-            clone_state_fn=copy.deepcopy,
+            clone_state_fn=_clone_state,
         )
         self.last_imagined_transitions = result.imagined_transitions
         self.last_planner_trace = result.trace

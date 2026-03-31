@@ -44,12 +44,24 @@ def test_seed_demo_data_populates_leaderboard(tmp_path, monkeypatch):
     app = modules["worldmodel_server.main"].app
 
     with TestClient(app) as client:
-        response = client.get("/api/leaderboard?track=test")
+        response = client.get("/api/leaderboard?track=test&include_demo=true")
 
     assert response.status_code == 200
     rows = response.json()
     assert len(rows) >= 2
     assert any(row["agent"] == "demo-mpc" for row in rows)
+
+
+def test_public_leaderboard_hides_seeded_demo_rows_by_default(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path, seed_demo=True)
+    app = modules["worldmodel_server.main"].app
+
+    with TestClient(app) as client:
+        response = client.get("/api/leaderboard?track=test")
+
+    assert response.status_code == 200
+    rows = response.json()
+    assert rows == []
 
 
 def test_api_key_can_create_and_upload_run(tmp_path, monkeypatch):

@@ -22,6 +22,7 @@ class StochasticLatentModel(TorchModelBase):
         self.reward_head = torch.nn.Linear(c.latent_dim, 1)
         self.done_head = torch.nn.Linear(c.latent_dim, 1)
         self.obs_head = torch.nn.Linear(c.latent_dim, c.obs_dim)
+        self.initialize_optimizer()
 
     def init_state(self, batch_size: int = 1) -> dict[str, torch.Tensor]:
         h = torch.zeros((batch_size, self.config.latent_dim), device=self.device)

@@ -263,6 +263,7 @@ def leaderboard(
     track: str = Query(default="test"),
     env: str | None = Query(default=None),
     agent: str | None = Query(default=None),
+    include_demo: bool = Query(default=False),
     session: Session = Depends(get_session),
 ):
     q = select(RunEntry).where(RunEntry.status == "uploaded", RunEntry.track == track)
@@ -270,6 +271,8 @@ def leaderboard(
         q = q.where(RunEntry.env == env)
     if agent:
         q = q.where(RunEntry.agent == agent)
+    if not include_demo:
+        q = q.where(RunEntry.created_by != "demo-seed")
 
     rows = session.scalars(q.order_by(desc(RunEntry.created_at))).all()
     out: list[LeaderboardRow] = []

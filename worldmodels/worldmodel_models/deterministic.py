@@ -24,6 +24,7 @@ class DeterministicLatentModel(TorchModelBase):
         self.obs_head = torch.nn.Linear(c.latent_dim, c.obs_dim)
         self.reward_head = torch.nn.Linear(c.latent_dim, 1)
         self.done_head = torch.nn.Linear(c.latent_dim, 1)
+        self.initialize_optimizer()
 
     def init_state(self, batch_size: int = 1) -> dict[str, torch.Tensor]:
         latent = torch.zeros(

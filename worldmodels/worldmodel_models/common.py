@@ -33,8 +33,11 @@ class TorchModelBase(torch.nn.Module):
         super().__init__()
         self.config = config
         self.device = torch.device(config.device)
+        self.optimizer: torch.optim.Optimizer | None = None
+
+    def initialize_optimizer(self) -> None:
         self.to(self.device)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=config.lr)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.config.lr)
 
     def _obs_tensor(self, obs) -> torch.Tensor:
         arr = to_numpy_obs(obs)
