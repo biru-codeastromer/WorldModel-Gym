@@ -37,3 +37,4 @@ paper/*.out
 paper/*.toc
 paper/worldmodelgym.pdf
 .vercel
+images/
