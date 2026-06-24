@@ -12,7 +12,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--track", default="test", choices=["train", "test", "continual"])
     parser.add_argument("--seeds", default="", type=str)
     parser.add_argument("--budget", default="", type=str, help="comma-separated key=value pairs")
-    parser.add_argument("--max-episodes", default=2, type=int)
+    # 50 episodes per track gives a meaningful success_rate and usable
+    # bootstrap CIs. The harness additionally guarantees every track seed is
+    # covered at least once (it runs max(max_episodes, n_seeds) episodes).
+    parser.add_argument("--max-episodes", default=50, type=int)
     return parser.parse_args()
 
 

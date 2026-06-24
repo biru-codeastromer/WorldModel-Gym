@@ -3,10 +3,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+import torch
+
 
 @dataclass
 class AgentConfig:
     action_space_n: int = 8
+
+
+def seed_everything(seed: int) -> None:
+    """Seed the global torch and numpy RNGs deterministically.
+
+    Centralized so every agent reset produces identical action sequences across
+    runs with the same seed. Operations are CPU-only here, so seeding torch's
+    global generator plus numpy is sufficient for reproducibility.
+    """
+    torch.manual_seed(int(seed))
+    np.random.seed(int(seed))
 
 
 class BaseAgent:
@@ -16,7 +30,8 @@ class BaseAgent:
         self.last_planner_trace: dict[str, Any] = {}
 
     def reset(self, seed: int | None = None) -> None:
-        del seed
+        if seed is not None:
+            seed_everything(seed)
 
     def act(self, obs, info: dict) -> int:
         raise NotImplementedError

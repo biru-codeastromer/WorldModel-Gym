@@ -8,8 +8,12 @@ from worldmodel_models.common import ModelConfig, TorchModelBase
 
 
 class StochasticLatentModel(TorchModelBase):
-    def __init__(self, config: ModelConfig | None = None):
-        super().__init__(config or ModelConfig())
+    def __init__(
+        self,
+        config: ModelConfig | None = None,
+        seed: int | torch.Generator | None = None,
+    ):
+        super().__init__(config or ModelConfig(), seed=seed)
         c = self.config
         self.obs_encoder = torch.nn.Sequential(
             torch.nn.Linear(c.obs_dim, c.latent_dim),
@@ -34,7 +38,7 @@ class StochasticLatentModel(TorchModelBase):
         stats = self.posterior(emb)
         mean, logvar = torch.chunk(stats, 2, dim=-1)
         std = torch.exp(0.5 * logvar).clamp(min=1e-4)
-        eps = torch.randn_like(std)
+        eps = self._randn_like(std)
         z = mean + eps * std
         h = self.gru(z, prev_state["h"])
         return {"h": h, "z": z, "mean": mean, "logvar": logvar}
@@ -44,7 +48,7 @@ class StochasticLatentModel(TorchModelBase):
         prior_stats = self.prior(torch.cat([state["h"], a], dim=-1))
         mean, logvar = torch.chunk(prior_stats, 2, dim=-1)
         std = torch.exp(0.5 * logvar).clamp(min=1e-4)
-        eps = torch.randn_like(std)
+        eps = self._randn_like(std)
         z = mean + eps * std
         h = self.gru(z, state["h"])
 
@@ -99,7 +103,7 @@ class StochasticLatentModel(TorchModelBase):
             prior_stats = self.prior(torch.cat([posterior_state["h"], action_tensor], dim=-1))
             mean, logvar = torch.chunk(prior_stats, 2, dim=-1)
             std = torch.exp(0.5 * logvar).clamp(min=1e-4)
-            eps = torch.randn_like(std)
+            eps = self._randn_like(std)
             z = mean + eps * std
             h = self.gru(z, posterior_state["h"])
 

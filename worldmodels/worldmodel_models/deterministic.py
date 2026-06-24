@@ -8,8 +8,12 @@ from worldmodel_models.common import ModelConfig, TorchModelBase
 
 
 class DeterministicLatentModel(TorchModelBase):
-    def __init__(self, config: ModelConfig | None = None):
-        super().__init__(config or ModelConfig())
+    def __init__(
+        self,
+        config: ModelConfig | None = None,
+        seed: int | torch.Generator | None = None,
+    ):
+        super().__init__(config or ModelConfig(), seed=seed)
         c = self.config
         self.obs_encoder = torch.nn.Sequential(
             torch.nn.Linear(c.obs_dim, c.latent_dim),

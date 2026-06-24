@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from math import sqrt
 from typing import Any, Callable
 
+import numpy as np
+
 from worldmodel_planners.base import PlanningResult
 
 
@@ -28,12 +30,20 @@ class MCTSPlanner:
         max_depth: int = 20,
         c_uct: float = 1.4,
         discount: float = 0.99,
+        seed: int = 0,
     ):
         self.action_space_n = action_space_n
         self.num_simulations = num_simulations
         self.max_depth = max_depth
         self.c_uct = c_uct
         self.discount = discount
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
+
+    def reseed(self, seed: int) -> None:
+        """Reset the planner RNG so repeated plan() calls are reproducible."""
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
 
     def plan(
         self,
@@ -41,7 +51,29 @@ class MCTSPlanner:
         transition_fn: Callable[[Any, int], tuple[Any, float, bool]],
         clone_state_fn: Callable[[Any], Any],
         legal_actions_fn: Callable[[Any], list[int]] | None = None,
+        value_fn: Callable[[Any], float] | None = None,
+        seed: int | None = None,
     ) -> PlanningResult:
+        """Run MCTS planning from ``root_state``.
+
+        Parameters
+        ----------
+        value_fn:
+            Optional leaf value estimator. When provided, the value of a
+            non-terminal leaf is bootstrapped with ``value_fn(state)`` (after
+            discounting by the rollout depth) so that credit can propagate
+            before a terminal/goal state is reached. This may wrap a learned
+            value head exposed by a world model, or an injectable heuristic
+            (e.g. negative distance-to-subgoal). When ``None`` (default), only
+            observed rewards drive the search -- the original behavior, minus
+            the action-index tie-break bias.
+        seed:
+            Optional per-call seed. When provided, the planner RNG is reset to
+            this seed before planning so that repeated calls are reproducible.
+        """
+        if seed is not None:
+            self.reseed(seed)
+
         if legal_actions_fn is None:
 
             def legal_actions_fn(_state: Any) -> list[int]:
@@ -80,7 +112,15 @@ class MCTSPlanner:
                     depth += 1
 
             max_reached_depth = max(max_reached_depth, depth)
-            value = self._discounted_return(rewards)
+
+            # Bootstrap the leaf value: discounted rewards collected along the
+            # rollout plus, if the leaf is non-terminal and a value function is
+            # available, its (discounted) estimate. Without a value function the
+            # leaf bootstrap is 0.0, recovering pure reward-driven backup.
+            leaf_value = 0.0
+            if value_fn is not None and not done:
+                leaf_value = float(value_fn(state))
+            value = self._discounted_return(rewards, leaf_value)
 
             for back_node in reversed(path):
                 back_node.visits += 1
@@ -90,7 +130,7 @@ class MCTSPlanner:
         if not root.children:
             return PlanningResult(action=0, value=0.0, imagined_transitions=0, trace={"tree": {}})
 
-        best_action, best_child = max(root.children.items(), key=lambda kv: kv[1].visits)
+        best_action, best_child = self._argmax_visits(root)
         tree_stats = {
             str(action): {"visits": child.visits, "value": child.value}
             for action, child in root.children.items()
@@ -110,6 +150,7 @@ class MCTSPlanner:
             "root_children": tree_stats,
             "top_rollouts": top_rollouts,
             "chosen_action": int(best_action),
+            "used_value_fn": value_fn is not None,
         }
         return PlanningResult(
             action=int(best_action),
@@ -118,23 +159,46 @@ class MCTSPlanner:
             trace=trace,
         )
 
+    def _argmax_visits(self, node: MCTSNode) -> tuple[int, MCTSNode]:
+        """Pick the most-visited child, breaking ties with the seeded RNG.
+
+        Using ``max()`` here would deterministically favor the lowest action
+        index inserted first; under sparse reward every root action has equal
+        visits, so that collapses to "always return action 0". We instead pick
+        uniformly at random among the tied maxima.
+        """
+        items = list(node.children.items())
+        best = max(child.visits for _, child in items)
+        tied = [(action, child) for action, child in items if child.visits == best]
+        if len(tied) == 1:
+            return tied[0]
+        idx = int(self.rng.integers(len(tied)))
+        return tied[idx]
+
     def _select(self, node: MCTSNode) -> tuple[int, MCTSNode]:
         total_visits = max(1, node.visits)
 
-        def uct(item: tuple[int, MCTSNode]):
-            action, child = item
+        def uct(child: MCTSNode) -> float:
             if child.visits == 0:
                 return float("inf")
             exploit = child.value
             explore = self.c_uct * sqrt(total_visits) / (1 + child.visits)
-            return exploit + explore + action * 1e-6
+            return exploit + explore
 
-        return max(node.children.items(), key=uct)
+        items = list(node.children.items())
+        scores = [uct(child) for _, child in items]
+        best_score = max(scores)
+        tied = [item for item, score in zip(items, scores) if score == best_score]
+        if len(tied) == 1:
+            return tied[0]
+        idx = int(self.rng.integers(len(tied)))
+        return tied[idx]
 
-    def _discounted_return(self, rewards: list[float]) -> float:
+    def _discounted_return(self, rewards: list[float], leaf_value: float = 0.0) -> float:
         total = 0.0
         discount = 1.0
         for reward in rewards:
             total += discount * reward
             discount *= self.discount
+        total += discount * leaf_value
         return total

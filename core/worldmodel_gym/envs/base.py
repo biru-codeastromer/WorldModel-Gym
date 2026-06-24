@@ -80,7 +80,7 @@ class BaseGridEnv(gym.Env):
         info = {
             "events": [],
             "episode_id": self.episode_id,
-            "oracle_hint": self._trace_state(),
+            "oracle_hint": self.oracle_hint(),
         }
         return obs, info
 
@@ -94,7 +94,7 @@ class BaseGridEnv(gym.Env):
         info: dict[str, Any] = {
             "events": events,
             "step": self.step_count,
-            "oracle_hint": self._trace_state(),
+            "oracle_hint": self.oracle_hint(),
         }
 
         trace_step = TraceStep(
@@ -184,6 +184,27 @@ class BaseGridEnv(gym.Env):
         return {
             "agent_pos": [int(self.agent_pos[0]), int(self.agent_pos[1])],
         }
+
+    def oracle_hint(self) -> dict[str, Any]:
+        """Privileged, fully-observed state for an oracle / shortest-path agent.
+
+        This is exposed via ``info["oracle_hint"]`` and is NOT part of the
+        agent's observation. It augments the per-step trace state with the full
+        wall/obstacle grid so a privileged planner can run real path planning.
+
+        Subclasses already place goal / subgoal coordinates into
+        ``_trace_state``; here we add the global static structure:
+
+        - ``grid_size``: side length of the square grid.
+        - ``walls``: ``grid_size x grid_size`` list-of-lists of 0/1, where 1
+          marks an impassable wall cell. Absent when an env has no wall grid.
+        """
+        hint = dict(self._trace_state())
+        hint["grid_size"] = int(self.grid_size)
+        walls = getattr(self, "walls", None)
+        if walls is not None:
+            hint["walls"] = np.asarray(walls).astype(np.int64).tolist()
+        return hint
 
     def clone_env_state(self) -> dict[str, Any]:
         return copy.deepcopy(self.__dict__)

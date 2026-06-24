@@ -36,3 +36,17 @@ class RunMetrics(BaseModel):
     model_fidelity: dict[str, float]
     generalization_gap: float
     continual_metrics: dict[str, float] = Field(default_factory=dict)
+
+    # --- Statistical rigor (all optional / backward compatible) ---
+    # Number of episodes the test aggregate was computed over.
+    n_episodes: int = 0
+    # Number of distinct seeds used for the evaluation track.
+    n_seeds: int = 0
+    # Bootstrap 95% CI for success_rate as [low, high].
+    success_rate_ci: tuple[float, float] | None = None
+    # Bootstrap 95% CI for mean_return as [low, high].
+    mean_return_ci: tuple[float, float] | None = None
+    # Mean return aggregated per seed, keyed by seed (as string).
+    per_seed_return: dict[str, float] = Field(default_factory=dict)
+    # Success rate aggregated per seed, keyed by seed (as string).
+    per_seed_success_rate: dict[str, float] = Field(default_factory=dict)

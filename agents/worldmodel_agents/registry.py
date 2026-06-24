@@ -27,3 +27,21 @@ def create_agent(name: str, action_space_n: int = 8):
 
     msg = f"Unknown agent: {name}"
     raise ValueError(msg)
+
+
+# Human-readable labels describing what each agent actually is. Kept accurate so
+# downstream reports do not mislabel agents (e.g. PPO is a genuine learner now,
+# not a random stub).
+AGENT_LABELS: dict[str, str] = {
+    "random": "Uniform-random baseline",
+    "greedy_oracle": "Privileged oracle (BFS shortest-path over the true wall grid)",
+    "planner_oracle": "MCTS over the perfect simulator with a privileged distance heuristic",
+    "imagination_mpc": "Learned ensemble world model + CEM-MPC planning",
+    "search_mcts": "Learned latent world model + MCTS planning (MuZero-style)",
+    "ppo": "Model-free PPO (actor-critic, GAE, clipped surrogate)",
+}
+
+
+def list_agents() -> list[dict[str, str]]:
+    """Return the registered agents with accurate descriptions."""
+    return [{"id": key, "label": label} for key, label in AGENT_LABELS.items()]

@@ -9,9 +9,24 @@ from worldmodel_models.deterministic import DeterministicLatentModel
 
 
 class EnsembleWorldModel:
-    def __init__(self, n_models: int = 5, config: ModelConfig | None = None):
+    def __init__(
+        self,
+        n_models: int = 5,
+        config: ModelConfig | None = None,
+        seed: int | None = None,
+    ):
+        cfg = config or ModelConfig()
+        self.seed = seed
+        # Give each member a distinct-but-deterministic seed derived from the
+        # base seed so members are diverse (non-zero reward std) yet the whole
+        # ensemble is reproducible. When seed is None members fall back to the
+        # global RNG (non-deterministic) for backward compatibility.
         self.models = [
-            DeterministicLatentModel(config=config or ModelConfig()) for _ in range(n_models)
+            DeterministicLatentModel(
+                config=cfg,
+                seed=None if seed is None else seed + i,
+            )
+            for i in range(n_models)
         ]
 
     def init_state(self, batch_size: int = 1):
@@ -56,3 +71,22 @@ class EnsembleWorldModel:
         losses = [m.update(batch) for m in self.models]
         mean_loss = float(np.mean([x.get("loss", 0.0) for x in losses]))
         return {"loss": mean_loss}
+
+    def reset_rng(self) -> None:
+        for m in self.models:
+            m.reset_rng()
+
+    def save_state(self) -> dict:
+        return {
+            "seed": self.seed,
+            "members": [m.save_state() for m in self.models],
+        }
+
+    def load_state(self, checkpoint: dict) -> None:
+        members = checkpoint["members"]
+        if len(members) != len(self.models):
+            msg = f"Checkpoint has {len(members)} members but ensemble has " f"{len(self.models)}"
+            raise ValueError(msg)
+        self.seed = checkpoint.get("seed", self.seed)
+        for m, ckpt in zip(self.models, members, strict=True):
+            m.load_state(ckpt)
