@@ -8,9 +8,9 @@ import "./globals.css";
 
 const cmuSerif = localFont({
   src: [
-    { path: "./fonts/CMUSerif-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/CMUSerif-Italic.ttf", weight: "400", style: "italic" },
-    { path: "./fonts/CMUSerif-Bold.ttf", weight: "700", style: "normal" }
+    { path: "./fonts/CMUSerif-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/CMUSerif-Italic.woff2", weight: "400", style: "italic" },
+    { path: "./fonts/CMUSerif-Bold.woff2", weight: "700", style: "normal" }
   ],
   variable: "--font-serif",
   display: "swap"
@@ -64,9 +64,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${cmuSerif.variable} ${plexMono.variable}`}>
       <body className="text-[var(--ink)]">
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         <Providers>
           <Nav />
-          <main className="site-shell pt-[108px] md:pt-[124px]">{children}</main>
+          <main id="main-content" tabIndex={-1} className="site-shell pt-[108px] md:pt-[124px]">
+            {children}
+          </main>
           <SiteFooter />
         </Providers>
       </body>

@@ -109,6 +109,10 @@ def test_redis_fails_open_to_inprocess(monkeypatch):
 
 def test_module_singleton_is_inprocess_without_redis():
     # With no WMG_REDIS_URL configured, the default singleton is in-process.
-    from worldmodel_server.rate_limit import rate_limiter
+    # Import both the singleton and the class from the *current* module object so
+    # the isinstance check stays valid even if another test file reloaded
+    # ``worldmodel_server.rate_limit`` (which rebinds the class object) earlier in
+    # the session — the module-level import above would otherwise be stale.
+    import worldmodel_server.rate_limit as rl
 
-    assert isinstance(rate_limiter, SlidingWindowRateLimiter)
+    assert isinstance(rl.rate_limiter, rl.SlidingWindowRateLimiter)

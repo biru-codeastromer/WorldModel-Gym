@@ -31,15 +31,19 @@ export function Nav() {
         </Link>
 
         <nav className="hidden flex-1 items-center justify-center gap-7 text-sm text-[var(--ink)] lg:flex xl:gap-10">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`nav-link ${pathname === link.href ? "is-active" : ""}`}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`nav-link ${isActive ? "is-active" : ""}`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="flex items-center justify-end gap-4">

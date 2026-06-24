@@ -1,0 +1,43 @@
+name: Paper
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "paper/**"
+      - ".github/workflows/paper.yml"
+  pull_request:
+    paths:
+      - "paper/**"
+      - ".github/workflows/paper.yml"
+
+# Cancel superseded builds on the same ref.
+concurrency:
+  group: paper-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile LaTeX manuscript
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: paper
+          root_file: worldmodelgym.tex
+          latexmk_use_xelatex: false
+          # latexmk runs pdflatex + bibtex passes so \cite/\bibliography resolve.
+          args: -pdf -interaction=nonstopmode -halt-on-error
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldmodelgym-pdf
+          path: paper/worldmodelgym.pdf
+          if-no-files-found: error

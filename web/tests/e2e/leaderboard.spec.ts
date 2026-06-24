@@ -94,9 +94,9 @@ test("leaderboard and run detail pages stay navigable", async ({ page }) => {
   await page.goto("/leaderboard");
 
   await expect(page.getByText(/Rigorous benchmark rankings/i)).toBeVisible();
-  await page.getByRole("button", { name: /^train$/i }).click();
-  await page.getByRole("button", { name: /^continual$/i }).click();
-  await page.getByRole("button", { name: /^test$/i }).click();
+  await page.getByRole("tab", { name: /^train$/i }).click();
+  await page.getByRole("tab", { name: /^continual$/i }).click();
+  await page.getByRole("tab", { name: /^test$/i }).click();
   const firstRunLink = page.locator("table tbody tr a").first();
   await expect(firstRunLink).toBeVisible({ timeout: 15000 });
   await firstRunLink.click();

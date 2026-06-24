@@ -236,6 +236,26 @@ def _require_admin_access(
     return principal
 
 
+# Conservative defaults applied to every response. These are cheap, static, and
+# do not interfere with the CORS or Cache-Control headers set elsewhere (we only
+# add headers, never overwrite). HSTS is safe to always emit; browsers ignore it
+# on plain HTTP and honor it once the API is served over TLS.
+_SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
 @app.middleware("http")
 async def access_log_and_public_rate_limit(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
@@ -548,13 +568,44 @@ def readyz(session: Session = Depends(get_session)):
     return JSONResponse(status_code=503, content=payload)
 
 
+def _log_admin_audit_event(
+    action: str,
+    *,
+    principal: AuthenticatedPrincipal,
+    target: str,
+    request_id: str | None,
+    **extra: object,
+) -> None:
+    """Emit a structured audit record for an admin-scoped action.
+
+    Never includes secrets -- only the principal identifier (key prefix / token
+    label), the action, its target, and the request id for correlation.
+    """
+    log_system_event(
+        "admin_audit",
+        action=action,
+        principal=principal.identifier,
+        principal_kind=principal.kind,
+        target=target,
+        request_id=request_id,
+        **extra,
+    )
+
+
 @app.post("/api/runs/{run_id}/trigger", status_code=202, response_model=RunResponse)
 def trigger_demo_run(
+    request: Request,
     response: Response,
     run_id: str,
     session: Session = Depends(get_session),
-    _principal: AuthenticatedPrincipal = Depends(_require_admin_access),
+    principal: AuthenticatedPrincipal = Depends(_require_admin_access),
 ):
+    _log_admin_audit_event(
+        "run.trigger",
+        principal=principal,
+        target=run_id,
+        request_id=_request_id(request),
+    )
     # The async job tier is OPTIONAL. Without Redis + WMG_QUEUE_ENABLED there is
     # no runner to execute the job, so we fail honestly with 501 (unchanged from
     # the prior behavior) rather than implying the platform ran anything.

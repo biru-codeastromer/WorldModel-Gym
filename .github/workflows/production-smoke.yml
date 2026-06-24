@@ -20,3 +20,28 @@ jobs:
 
       - name: Check API health
         run: curl --fail --silent --show-error "$API_URL/healthz" > /dev/null
+
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install verify-script dependencies
+        run: python -m pip install --upgrade pip httpx
+
+      - name: Verify deployment and artifact integrity
+        # Runs the same liveness/readiness/leaderboard checks as the curl steps
+        # above, then additionally fetches a real run's metrics/config/trace and
+        # asserts they are non-empty and schema-plausible. The integrity probe is
+        # best-effort: it skips (does not fail) when the public leaderboard has no
+        # eligible run yet. Drop --require-artifact-integrity in once the
+        # production leaderboard is permanently seeded.
+        run: |
+          python scripts/verify_deployment.py \
+            --api-base "$API_URL" \
+            --web-base "$WEB_URL" \
+            --track test \
+            --check-artifact-integrity

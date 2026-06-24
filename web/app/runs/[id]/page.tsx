@@ -5,8 +5,9 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 
-import { fetchRun, fetchTrace } from "@/lib/api";
+import { fetchRun, fetchTrace, formatMetric } from "@/lib/api";
 import { extractEvents, normalizeEpisodes } from "@/lib/trace";
+import type { TraceEpisode } from "@/lib/trace";
 
 export default function RunViewerPage() {
   const params = useParams<{ id: string }>();
@@ -15,8 +16,24 @@ export default function RunViewerPage() {
   const runQuery = useQuery({ queryKey: ["run", runId], queryFn: () => fetchRun(runId) });
   const traceQuery = useQuery({ queryKey: ["trace", runId], queryFn: () => fetchTrace(runId) });
 
-  const episodes = useMemo(() => normalizeEpisodes(traceQuery.data ?? []), [traceQuery.data]);
-  const events = useMemo(() => extractEvents(episodes), [episodes]);
+  // normalizeEpisodes/extractEvents already tolerate malformed records, but wrap
+  // them here too so a totally unexpected payload shape cannot throw during
+  // render and white-screen the page.
+  const episodes = useMemo<TraceEpisode[]>(() => {
+    try {
+      const raw = traceQuery.data;
+      return normalizeEpisodes(Array.isArray(raw) ? raw : []);
+    } catch {
+      return [];
+    }
+  }, [traceQuery.data]);
+  const events = useMemo(() => {
+    try {
+      return extractEvents(episodes);
+    } catch {
+      return [];
+    }
+  }, [episodes]);
   const firstPlanner = useMemo(() => {
     for (const ep of episodes) {
       for (const step of ep.steps ?? []) {
@@ -73,19 +90,19 @@ export default function RunViewerPage() {
         <div className="rounded-[28px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.74)] p-6">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Success Rate</p>
           <p className="mt-3 font-[var(--font-serif)] text-5xl leading-none text-[var(--ink)]">
-            {Number(metrics.success_rate ?? 0).toFixed(2)}
+            {formatMetric(metrics.success_rate, 2)}
           </p>
         </div>
         <div className="rounded-[28px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.74)] p-6">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Mean Return</p>
           <p className="mt-3 font-[var(--font-serif)] text-5xl leading-none text-[var(--ink)]">
-            {Number(metrics.mean_return ?? 0).toFixed(2)}
+            {formatMetric(metrics.mean_return, 2)}
           </p>
         </div>
         <div className="rounded-[28px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.74)] p-6">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Model Fidelity (k1)</p>
           <p className="mt-3 font-[var(--font-serif)] text-5xl leading-none text-[var(--ink)]">
-            {Number(metrics.model_fidelity?.k1 ?? 0).toFixed(3)}
+            {formatMetric(metrics.model_fidelity?.k1, 3)}
           </p>
         </div>
       </div>
@@ -95,7 +112,7 @@ export default function RunViewerPage() {
           <h3 className="font-[var(--font-serif)] text-4xl leading-none text-[var(--ink)]">Episode Timeline</h3>
           <p className="mt-2 text-sm text-[var(--muted)]">Episodes logged: {traceLines.length}</p>
           <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-            {traceLines.map((ep: any, idx: number) => (
+            {traceLines.map((ep, idx) => (
               <div
                 key={idx}
                 className="rounded-[18px] border border-[rgba(185,174,195,0.42)] bg-[rgba(255,255,255,0.68)] p-3 font-mono text-xs text-[var(--ink)]"

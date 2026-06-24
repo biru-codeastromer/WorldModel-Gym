@@ -3,11 +3,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createRun,
   fetchLeaderboard,
+  fetchRun,
   fetchTasks,
   fetchTrace,
   parseTraceNdjson,
   uploadRunArtifacts
 } from "@/lib/api";
+
+/** A schema-valid RunResponse, optionally overridden per-test. */
+function runResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "run-1",
+    env: "memory_maze",
+    agent: "search_mcts",
+    track: "test",
+    status: "uploaded",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    metrics: {},
+    ...overrides
+  };
+}
 
 function jsonResponse(body: unknown, init?: { ok?: boolean; status?: number }) {
   const status = init?.status ?? 200;
@@ -108,7 +124,7 @@ describe("fetchJson (via typed wrappers)", () => {
 
 describe("parseJsonResponse (via createRun)", () => {
   it("returns the parsed body on success", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "run-1", status: "queued" }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(runResponse({ id: "run-1", status: "queued" })));
 
     const result = await createRun({ env: "e", agent: "a", track: "t" }, "key-123");
 
@@ -141,7 +157,7 @@ describe("parseJsonResponse (via createRun)", () => {
 
 describe("uploadRunArtifacts", () => {
   it("builds multipart FormData with only provided files and forwards the api key", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "run-9", status: "uploaded" }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(runResponse({ id: "run-9", status: "uploaded" })));
 
     const metricsFile = new File(["{}"], "metrics.json", { type: "application/json" });
     const result = await uploadRunArtifacts("run-9", { metricsFile, traceFile: null, configFile: null }, "k");

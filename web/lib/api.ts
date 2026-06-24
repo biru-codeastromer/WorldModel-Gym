@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export function getApiBase() {
   if (typeof window === "undefined") {
     return process.env.INTERNAL_API_BASE ?? process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -5,35 +7,132 @@ export function getApiBase() {
   return "/api/proxy";
 }
 
-export type LeaderboardRow = {
-  run_id: string;
-  env: string;
-  agent: string;
-  track: string;
-  success_rate: number;
-  mean_return: number;
-  planning_cost_ms_per_step: number;
-  created_at: string;
-};
+// ---------------------------------------------------------------------------
+// Zod schemas mirroring the server Pydantic / SQLAlchemy models.
+//
+// The API is trusted but not infallible: a malformed metrics blob, a partially
+// written run row, or a schema drift between server and client should degrade
+// gracefully instead of white-screening a page. Every response is parsed
+// through one of these schemas; numeric formatters then NaN-guard the result so
+// nothing renders as `NaN`/`undefined`.
+// ---------------------------------------------------------------------------
 
-export type TaskRecord = {
-  id: string;
-  description: string;
-  defaults?: Record<string, unknown>;
-};
+/**
+ * A finite number, or null when the source value is missing/NaN/non-finite.
+ *
+ * Note: zod's `z.number()` allows NaN by default, so a NaN slips through the
+ * union and is collapsed to null by the transform rather than failing parsing.
+ * Strings are coerced; non-numeric input becomes null. The field is nullish so a
+ * malformed numeric never rejects the surrounding object.
+ */
+function coerceFinite(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const n = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(n) ? n : null;
+}
 
-export type RunResponse = {
-  id: string;
-  env: string;
-  agent: string;
-  track: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  metrics: Record<string, any>;
-  trace_url?: string | null;
-  config_url?: string | null;
-};
+const finiteNumber = z
+  .union([z.number(), z.nan(), z.string()])
+  .nullish()
+  .transform(coerceFinite);
+
+/**
+ * Like `finiteNumber` but the field must be present (a leaderboard row always
+ * carries the column, even if its value is NaN/null). The output is `number | null`
+ * with no `undefined`, so it satisfies consumers like the chart that expect the
+ * key to exist.
+ */
+const finiteNumberRequired = z
+  .union([z.number(), z.nan(), z.string(), z.null()])
+  .transform(coerceFinite);
+
+/** Model-fidelity sub-object: `k1`/`k5`/`k20` rollout-horizon fidelity scores. */
+const ModelFidelitySchema = z
+  .object({
+    k1: finiteNumber,
+    k5: finiteNumber,
+    k20: finiteNumber
+  })
+  .partial()
+  .passthrough();
+
+/** Planning-cost sub-object as emitted by the server seed/runner. */
+const PlanningCostSchema = z
+  .object({
+    wall_clock_ms_per_step: finiteNumber
+  })
+  .partial()
+  .passthrough();
+
+/** A two-element [low, high] confidence interval, NaN-guarded. */
+const ConfidenceIntervalSchema = z
+  .union([z.tuple([finiteNumber, finiteNumber]), z.array(finiteNumber)])
+  .nullish();
+
+/**
+ * Run metrics. Mirrors the free-form `metrics: dict` the server stores. The
+ * core scalars (success_rate, mean_return) and the planning_cost / model_fidelity
+ * objects are recognised; the newer CI and per-seed fields are optional. Unknown
+ * keys are preserved via `.passthrough()` so the raw blob stays inspectable.
+ */
+export const RunMetricsSchema = z
+  .object({
+    success_rate: finiteNumber,
+    mean_return: finiteNumber,
+    planning_cost: z.union([PlanningCostSchema, finiteNumber]).nullish(),
+    model_fidelity: ModelFidelitySchema.nullish(),
+    success_rate_ci: ConfidenceIntervalSchema,
+    mean_return_ci: ConfidenceIntervalSchema,
+    per_seed: z.array(z.record(z.unknown())).nullish()
+  })
+  .partial()
+  .passthrough();
+
+export type RunMetrics = z.infer<typeof RunMetricsSchema>;
+
+export const LeaderboardRowSchema = z.object({
+  run_id: z.string(),
+  env: z.string(),
+  agent: z.string(),
+  track: z.string(),
+  success_rate: finiteNumberRequired,
+  mean_return: finiteNumberRequired,
+  planning_cost_ms_per_step: finiteNumberRequired,
+  created_at: z.string()
+});
+
+export type LeaderboardRow = z.infer<typeof LeaderboardRowSchema>;
+
+export const LeaderboardSchema = z.array(LeaderboardRowSchema);
+
+export const TaskRecordSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  defaults: z.record(z.unknown()).optional()
+});
+
+export type TaskRecord = z.infer<typeof TaskRecordSchema>;
+
+export const TasksResponseSchema = z.object({
+  tasks: z.array(TaskRecordSchema)
+});
+
+export const RunResponseSchema = z.object({
+  id: z.string(),
+  env: z.string(),
+  agent: z.string(),
+  track: z.string(),
+  status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  metrics: RunMetricsSchema.default({}),
+  trace_url: z.string().nullish(),
+  config_url: z.string().nullish()
+});
+
+export type RunResponse = z.infer<typeof RunResponseSchema>;
 
 export type RunCreatePayload = {
   id?: string;
@@ -42,7 +141,50 @@ export type RunCreatePayload = {
   track: string;
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
+/**
+ * Parse an unknown API payload through a zod schema, raising a readable error
+ * (rather than a raw ZodError) when the response shape is unexpected.
+ */
+export function parseWith<S extends z.ZodTypeAny>(schema: S, data: unknown, label: string): z.infer<S> {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    throw new Error(`Malformed ${label} response from API`);
+  }
+  return result.data;
+}
+
+// ---------------------------------------------------------------------------
+// NaN-guarded numeric formatters. These are the only place the UI turns a metric
+// into text, so they centralise the "never render NaN/undefined" guarantee.
+// ---------------------------------------------------------------------------
+
+/**
+ * Coerce an unknown value to a finite number, or return null. Strings that
+ * parse to finite numbers are accepted; NaN, Infinity, null, undefined, objects,
+ * and unparseable strings all collapse to null.
+ */
+export function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/** Format a metric to fixed decimals, substituting a placeholder when absent. */
+export function formatMetric(value: unknown, digits = 2, fallback = "--"): string {
+  const n = toFiniteNumber(value);
+  return n === null ? fallback : n.toFixed(digits);
+}
+
+async function fetchValidated<S extends z.ZodTypeAny>(
+  path: string,
+  schema: S,
+  label: string
+): Promise<z.infer<S>> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -54,7 +196,8 @@ async function fetchJson<T>(path: string): Promise<T> {
     if (!res.ok) {
       throw new Error(`Request failed (${res.status})`);
     }
-    return (await res.json()) as T;
+    const data = (await res.json()) as unknown;
+    return parseWith(schema, data, label);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("Request timed out while contacting the API");
@@ -65,7 +208,11 @@ async function fetchJson<T>(path: string): Promise<T> {
   }
 }
 
-async function parseJsonResponse<T>(res: Response): Promise<T> {
+async function parseJsonResponse<S extends z.ZodTypeAny>(
+  res: Response,
+  schema: S,
+  label: string
+): Promise<z.infer<S>> {
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -78,19 +225,20 @@ async function parseJsonResponse<T>(res: Response): Promise<T> {
     }
     throw new Error(message);
   }
-  return (await res.json()) as T;
+  const data = (await res.json()) as unknown;
+  return parseWith(schema, data, label);
 }
 
 export async function fetchTasks() {
-  return fetchJson<{ tasks: TaskRecord[] }>("/api/tasks");
+  return fetchValidated("/api/tasks", TasksResponseSchema, "tasks");
 }
 
 export async function fetchLeaderboard(track: string) {
-  return fetchJson<LeaderboardRow[]>(`/api/leaderboard?track=${track}`);
+  return fetchValidated(`/api/leaderboard?track=${track}`, LeaderboardSchema, "leaderboard");
 }
 
 export async function fetchRun(runId: string) {
-  return fetchJson<RunResponse>(`/api/runs/${runId}`);
+  return fetchValidated(`/api/runs/${runId}`, RunResponseSchema, "run");
 }
 
 export async function fetchTrace(runId: string) {
@@ -141,7 +289,7 @@ export async function createRun(payload: RunCreatePayload, apiKey: string) {
     body: JSON.stringify(payload)
   });
 
-  return parseJsonResponse<RunResponse>(res);
+  return parseJsonResponse(res, RunResponseSchema, "run");
 }
 
 export async function uploadRunArtifacts(
@@ -170,5 +318,5 @@ export async function uploadRunArtifacts(
     body
   });
 
-  return parseJsonResponse<RunResponse>(res);
+  return parseJsonResponse(res, RunResponseSchema, "run");
 }

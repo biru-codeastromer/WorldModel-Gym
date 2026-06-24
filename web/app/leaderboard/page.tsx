@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { LeaderboardChart } from "@/components/leaderboard-chart";
-import { fetchLeaderboard } from "@/lib/api";
+import { fetchLeaderboard, formatMetric, toFiniteNumber } from "@/lib/api";
 
 const tracks = ["test", "train", "continual"];
 
@@ -18,8 +18,14 @@ export default function LeaderboardPage() {
   });
 
   const rows = useMemo(() => data ?? [], [data]);
-  const topSuccess = rows.length > 0 ? Math.max(...rows.map((row) => row.success_rate)) : 0;
-  const fastestPlanner = rows.length > 0 ? Math.min(...rows.map((row) => row.planning_cost_ms_per_step)) : 0;
+  const successValues = rows
+    .map((row) => toFiniteNumber(row.success_rate))
+    .filter((value): value is number => value !== null);
+  const planningValues = rows
+    .map((row) => toFiniteNumber(row.planning_cost_ms_per_step))
+    .filter((value): value is number => value !== null);
+  const topSuccess = successValues.length > 0 ? Math.max(...successValues) : null;
+  const fastestPlanner = planningValues.length > 0 ? Math.min(...planningValues) : null;
 
   return (
     <section className="space-y-12 pb-8">
@@ -35,9 +41,9 @@ export default function LeaderboardPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <span className="stat-chip">{rows.length} live runs</span>
-            <span className="stat-chip">Best success {topSuccess.toFixed(2)}</span>
+            <span className="stat-chip">Best success {formatMetric(topSuccess, 2)}</span>
             <span className="stat-chip">
-              Fastest {rows.length > 0 ? `${fastestPlanner.toFixed(2)} ms/step` : "--"}
+              Fastest {fastestPlanner !== null ? `${formatMetric(fastestPlanner, 2)} ms/step` : "--"}
             </span>
           </div>
         </div>
@@ -72,17 +78,37 @@ export default function LeaderboardPage() {
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-6 border-b border-[rgba(185,174,195,0.46)] pb-3">
-        {tracks.map((item) => (
-          <button
-            key={item}
-            onClick={() => setTrack(item)}
-            className={`eyebrow-tab px-0 pb-3 text-left text-base ${track === item ? "is-active" : ""}`}
-          >
-            {item}
-          </button>
-        ))}
+      <div
+        role="tablist"
+        aria-label="Leaderboard track"
+        className="flex flex-wrap gap-6 border-b border-[rgba(185,174,195,0.46)] pb-3"
+      >
+        {tracks.map((item) => {
+          const selected = track === item;
+          return (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              id={`track-tab-${item}`}
+              aria-selected={selected}
+              aria-controls="leaderboard-panel"
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setTrack(item)}
+              className={`eyebrow-tab px-0 pb-3 text-left text-base ${selected ? "is-active" : ""}`}
+            >
+              {item}
+            </button>
+          );
+        })}
       </div>
+
+      <div
+        id="leaderboard-panel"
+        role="tabpanel"
+        aria-labelledby={`track-tab-${track}`}
+        className="space-y-12"
+      >
 
       {isLoading ? (
         <div className="space-y-4">
@@ -148,9 +174,9 @@ export default function LeaderboardPage() {
                     </td>
                     <td className="py-4">{row.env}</td>
                     <td className="py-4">{row.agent}</td>
-                    <td className="py-4">{row.success_rate.toFixed(2)}</td>
-                    <td className="py-4">{row.mean_return.toFixed(2)}</td>
-                    <td className="py-4">{row.planning_cost_ms_per_step.toFixed(2)}</td>
+                    <td className="py-4">{formatMetric(row.success_rate, 2)}</td>
+                    <td className="py-4">{formatMetric(row.mean_return, 2)}</td>
+                    <td className="py-4">{formatMetric(row.planning_cost_ms_per_step, 2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -158,6 +184,7 @@ export default function LeaderboardPage() {
           </div>
         </>
       ) : null}
+      </div>
     </section>
   );
 }

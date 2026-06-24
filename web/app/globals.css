@@ -53,6 +53,31 @@ a {
   text-decoration: none;
 }
 
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -120px;
+  z-index: 100;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fffdfa;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: top 160ms ease;
+}
+
+.skip-link:focus {
+  top: 16px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#main-content:focus {
+  outline: none;
+}
+
 .site-shell {
   margin: 0 auto;
   width: 100%;

@@ -3,10 +3,24 @@ import { describe, expect, it } from "vitest";
 import { extractEvents, normalizeEpisodes } from "@/lib/trace";
 
 describe("normalizeEpisodes", () => {
-  it("returns episode-shaped input unchanged", () => {
+  it("preserves episode-shaped input (normalizing each step in place)", () => {
     const input = [{ steps: [{ t: 0, events: [] }] }, { steps: [] }];
 
-    expect(normalizeEpisodes(input)).toBe(input);
+    const out = normalizeEpisodes(input);
+
+    expect(out).toHaveLength(2);
+    expect(out[0].steps[0]).toMatchObject({ t: 0, events: [] });
+    expect(out[1].steps).toEqual([]);
+  });
+
+  it("normalizes malformed steps inside an otherwise valid episode", () => {
+    const input = [{ steps: [{ events: "oops" }, { t: 4, events: ["ok"] }] }];
+
+    const out = normalizeEpisodes(input);
+
+    // Bad events coerced to [], missing t backfilled from index.
+    expect(out[0].steps[0]).toMatchObject({ t: 0, events: [] });
+    expect(out[0].steps[1]).toMatchObject({ t: 4, events: ["ok"] });
   });
 
   it("wraps a flat list of steps into a single episode", () => {
@@ -43,10 +57,10 @@ describe("normalizeEpisodes", () => {
     expect(out[0].steps[1].events).toEqual(["ok"]);
   });
 
-  it("treats an empty trace as the episode shape (returns it unchanged)", () => {
-    const input: any[] = [];
+  it("returns an empty episode list for an empty trace", () => {
+    const input: unknown[] = [];
 
-    expect(normalizeEpisodes(input)).toBe(input);
+    expect(normalizeEpisodes(input)).toEqual([]);
   });
 });
 

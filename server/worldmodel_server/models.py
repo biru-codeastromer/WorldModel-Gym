@@ -62,3 +62,6 @@ class ApiKey(Base):
     rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=120)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Optional hard expiry. A key past this instant is rejected at authentication
+    # time exactly like an inactive key. NULL means the key never expires.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

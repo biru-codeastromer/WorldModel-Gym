@@ -5,6 +5,7 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage[numbers]{natbib}
+\usepackage[ruled,vlined]{algorithm2e}
 
 \title{WorldModel Gym: A Long-Horizon Planning Benchmark for Imagination-Based Agents}
 \author{WorldModel Gym Team}
@@ -14,11 +15,11 @@
 \maketitle
 
 \begin{abstract}
-Imagination-based reinforcement learning combines learned dynamics models with explicit planning to address long-horizon decision making. Existing benchmarks do not consistently stress delayed reward, partial observability, and procedural generalization under reproducible evaluation constraints. We introduce \textbf{WorldModel Gym}, a benchmark and evaluation platform centered on three lightweight task families---MemoryMaze, SwitchQuest, and CraftLite---designed to expose sparse credit assignment, memory demands, and compositional subgoal structure. The platform provides deterministic train/test seed tracks, optional continual nonstationarity, standardized trace logging, and planning-cost reporting to contextualize performance. We release a complete open-source stack including environments, baseline agents, planner implementations (MCTS and MPC-CEM), a leaderboard API, and web/mobile run viewers.
+Imagination-based reinforcement learning combines learned dynamics models with explicit planning to address long-horizon decision making. Existing benchmarks do not consistently stress delayed reward, partial observability, and procedural generalization under reproducible evaluation constraints. We introduce \textbf{WorldModel Gym}, a benchmark and evaluation platform centered on three lightweight task families---MemoryMaze, SwitchQuest, and CraftLite---designed to expose sparse credit assignment, memory demands, and compositional subgoal structure. The platform provides deterministic train/test seed tracks, optional continual nonstationarity, standardized trace logging, and planning-cost reporting to contextualize performance. Our evaluation protocol pairs a genuine open-loop $k$-step model-fidelity metric with a percentile-bootstrap confidence-interval procedure, and anchors every score against two honest reference points: a privileged oracle that solves each task and a uniform-random controller. We release a complete open-source stack including environments, baseline agents (uniform random, a BFS shortest-path oracle, an MCTS-over-perfect-simulator planner, a learned-model MCTS agent, a learned-ensemble CEM-MPC agent, and a real model-free PPO learner), planner implementations (MCTS and MPC-CEM with value bootstrapping), a leaderboard API, and web/mobile run viewers. Empirical tables in this manuscript are presented as evaluation \emph{protocols} and placeholders; reported numbers are populated by running the released harness rather than asserted here.
 \end{abstract}
 
 \section{Motivation and Research Questions}
-World models are central to scalable model-based RL and planning systems \citep{ha2018worldmodels,hafner2019planet,hafner2019dreamer,schrittwieser2020muzero,hansen2023tdmpc2}. Yet benchmark conclusions are often sensitive to observability assumptions, procedural overfitting, and underreported planning compute. WorldModel Gym targets these gaps with the following questions:
+World models are central to scalable model-based RL and planning systems \citep{ha2018worldmodels,hafner2019planet,hafner2019dreamer,schrittwieser2020muzero,hansen2023tdmpc2}. Yet benchmark conclusions are often sensitive to observability assumptions, procedural overfitting, and underreported planning compute. Two further pitfalls motivate our design. First, a ``model-fidelity'' metric that re-observes ground truth at every step measures one-step teacher forcing, not the compounding error that actually limits planning; we instead roll the model forward on its own predictions. Second, single-point success rates over a handful of seeds invite over-claiming; we attach bootstrap confidence intervals and fix anchored reference baselines so a reader can immediately see whether a method beats random and how far it sits below a privileged oracle. WorldModel Gym targets these gaps with the following questions:
 \begin{enumerate}
     \item How do imagination-based agents trade off model fidelity and planning budget under sparse rewards?
     \item What is the generalization gap between procedural train and held-out test seed distributions?
@@ -26,30 +27,164 @@ World models are central to scalable model-based RL and planning systems \citep{
 \end{enumerate}
 
 \section{Related Work}
-WorldModel Gym builds on model-based RL and latent planning, including World Models \citep{ha2018worldmodels}, PlaNet \citep{hafner2019planet}, Dreamer \citep{hafner2019dreamer}, and MuZero \citep{schrittwieser2020muzero}. We include classical online planning references such as POMCP \citep{silver2010pomcp} and DESPOT \citep{somani2013despot,ye2017despot}. For benchmark design, we draw from DeepMind Lab \citep{beattie2016dmlab}, Procgen \citep{cobbe2019procgen,cobbe2021ppg}, and Crafter \citep{hafner2021crafter}. Continual evaluation follows recent continual RL and continual-learning survey efforts \citep{pan2025crlsurvey,wang2025continualrlbook,wang2024continualsurvey}.
+WorldModel Gym builds on model-based RL and latent planning, including World Models \citep{ha2018worldmodels}, PlaNet \citep{hafner2019planet}, Dreamer \citep{hafner2019dreamer}, and MuZero \citep{schrittwieser2020muzero}; our learned-model MCTS baseline follows the MuZero recipe of search over a learned latent model, and our CEM-MPC planner follows the PlaNet/TD-MPC family \citep{hafner2019planet,hansen2023tdmpc2}. We include classical online planning references such as POMCP \citep{silver2010pomcp} and DESPOT \citep{somani2013despot,ye2017despot}. Our model-free reference is PPO \citep{schulman2017ppo}. For benchmark design, we draw from DeepMind Lab \citep{beattie2016dmlab}, Procgen \citep{cobbe2019procgen,cobbe2021ppg}, and Crafter \citep{hafner2021crafter}. Continual evaluation follows recent continual RL and continual-learning survey efforts \citep{pan2025crlsurvey,wang2025continualrlbook,wang2024continualsurvey}.
 
 \section{Benchmark Design}
 \paragraph{Task families.}
-\textbf{MemoryMaze} is a grid POMDP with restricted FOV, key-door dependency, and terminal success reward. \textbf{SwitchQuest} requires discovering and executing hidden switch sequences under partial observations. \textbf{CraftLite} is a lightweight crafting world with compositional resource dependencies and optional strict sparse reward.
+\textbf{MemoryMaze} is a grid POMDP with restricted field of view, a key--door dependency, and a terminal success reward: the agent must locate a key, open a door from an adjacent cell, then reach the goal. \textbf{SwitchQuest} requires discovering and executing a hidden switch sequence under partial observation; only toggling switches in the correct order completes the task. \textbf{CraftLite} is a lightweight crafting world with a compositional resource chain---gather wood, craft a tool at a station, then collect a gem---under an optional strict-sparse reward.
 
 \paragraph{Observation modes.}
-Each environment returns RGB ($64\times64$), symbolic tensor channels, or both. Semantic events are emitted at each step, enabling a stable episode-trace format for analysis and visualization.
+Each environment returns RGB ($64\times64$), symbolic tensor channels, or both. Semantic events (e.g. \texttt{goal\_reached}, \texttt{switch\_chain\_complete}, \texttt{craft\_goal\_complete}, and resource events) are emitted at each step, enabling a stable episode-trace format for analysis and visualization. Each environment also exposes a privileged \texttt{oracle\_hint} (wall grid, subgoal positions, inventory) and clone/simulate hooks so that privileged baselines can plan over the true dynamics.
 
-\paragraph{Tracks.}
-We define train and test procedural seed tracks and a continual track where task distribution shifts occur every fixed episode interval.
+\paragraph{Tracks and seeds.}
+We define disjoint train and test procedural seed tracks per environment (eight train seeds and four held-out test seeds each), and a continual track in which the task distribution drifts every fixed episode interval. The drift increases wall density (MemoryMaze, SwitchQuest) or obstacle count (CraftLite) by a fixed per-phase strength, exposing forward transfer, backward transfer, and forgetting.
 
-\section{Evaluation and Baselines}
-\paragraph{Agents and planners.}
-We provide random and oracle diagnostics, model-free and imagination-based baselines, and planner-only ceilings. Planning modules include MCTS and MPC with CEM.
+\section{Baselines and Planners}
+We provide a ladder of agents spanning trivial floor to privileged ceiling, so that every learned method can be read against honest anchors.
+\begin{itemize}
+    \item \textbf{Uniform random.} Samples actions uniformly; the empirical floor ($\approx 0$ success under sparse reward).
+    \item \textbf{BFS oracle (privileged).} Runs breadth-first shortest-path search over the fully observed wall grid, chaining each task's subgoals; the privileged success ceiling ($=1.0$).
+    \item \textbf{Planner-over-perfect-simulator oracle.} Runs MCTS over the environment's exact simulator, using a privileged bounded distance-to-subgoal potential as the leaf \texttt{value\_fn} so credit reaches the search before a terminal reward is observed. It measures planning quality given a perfect model.
+    \item \textbf{Learned-model MCTS (MuZero-style).} A deterministic latent world model trained online from the agent's own transitions, with MCTS backing up the model's predicted rewards.
+    \item \textbf{Ensemble CEM-MPC (imagination).} An ensemble world model trained online; CEM scores imagined trajectories by predicted reward minus an ensemble-disagreement uncertainty penalty.
+    \item \textbf{Model-free PPO.} A genuine actor--critic PPO learner \citep{schulman2017ppo} with GAE($\lambda$) advantages and the clipped surrogate objective, learned end-to-end from environment reward with no privileged state.
+\end{itemize}
+Both planners break ties among equal-value actions with a seeded RNG rather than by action index, avoiding the ``always pick action 0'' collapse that flat sparse-reward landscapes otherwise induce. The MCTS planner accepts an optional leaf \texttt{value\_fn} so non-terminal leaves can be bootstrapped (by a learned value head or an injected heuristic) before a terminal reward is reached.
 
-\paragraph{Metrics.}
-Primary metrics include success rate, mean return, median steps-to-success, achievement completion, and planning cost (latency, imagined transitions, memory). Model fidelity reports $k$-step reward prediction errors for $k\in\{1,5,10\}$. Generalization gap is computed as train-test performance delta. Continual metrics include forward transfer, backward transfer, and forgetting.
+\section{Evaluation Protocol}
+
+\subsection{Open-loop $k$-step model fidelity}
+A faithful fidelity metric must reflect compounding rollout error. We seed the model's belief from the single real observation at a start index $i$, then roll it forward by feeding its \emph{own} predicted latent state, never re-observing ground truth. The predicted reward at horizon $k$ is compared against the actual reward of transition $i{+}k{-}1$. We accumulate a mean absolute error per horizon $k\in\{1,5,10\}$; episodes shorter than $k$ contribute no samples to that horizon, and rollouts never cross episode boundaries. Algorithm~\ref{alg:fidelity} states the procedure.
+
+\begin{algorithm}[t]
+\caption{Open-loop $k$-step model fidelity (per agent with a world model)}\label{alg:fidelity}
+\KwIn{episode transition lists $\mathcal{E}$; horizons $K=\{1,5,10\}$; world model $M$}
+\KwOut{mean absolute reward error $\mathrm{err}[k]$ for each $k\in K$}
+\ForEach{$k \in K$}{$\mathrm{acc}[k] \gets [\,]$}
+\ForEach{episode $\tau \in \mathcal{E}$}{
+  \For{start $i \gets 0$ \KwTo $|\tau|-1$}{
+    $s \gets M.\textsc{init\_state}()$\;
+    $s \gets M.\textsc{observe}(s, \tau[i].\mathrm{obs})$ \tcp*{seed belief from ONE real obs}
+    \For{offset $j \gets 0$ \KwTo $\min(\max K,\, |\tau|-i)-1$}{
+      $a \gets \tau[i{+}j].\mathrm{action}$\;
+      $s,\,\hat r \gets M.\textsc{predict}(s, a)$ \tcp*{roll on own prediction}
+      $k \gets j+1$\;
+      \If{$k \in K$}{
+        append $|\hat r - \tau[i{+}j].\mathrm{reward}|$ to $\mathrm{acc}[k]$\;
+      }
+    }
+  }
+}
+\ForEach{$k \in K$}{$\mathrm{err}[k] \gets \mathrm{mean}(\mathrm{acc}[k])$ if nonempty else $0$\;}
+\Return $\mathrm{err}$\;
+\end{algorithm}
+
+\subsection{Statistical protocol}
+For each metric we report a point estimate and a 95\% percentile bootstrap confidence interval over the per-episode values. With $B=2000$ resamples we draw with replacement from the per-episode success indicators (for success rate) or per-episode returns (for mean return), and take the $2.5$ and $97.5$ percentiles of the resampled means. A single sample yields a zero-width interval (the correct degenerate behavior), and an empty set yields no interval. We additionally report per-seed return and per-seed success rate so reviewers can inspect seed-level variance, and the number of episodes and distinct seeds backing each aggregate. The generalization gap is the train$-$test success-rate delta; continual metrics (forward transfer, backward transfer, forgetting) are computed from per-phase mean scores.
+
+\subsection{Evaluation harness}
+The harness (Algorithm~\ref{alg:harness}) covers every seed at least once, runs $\max(\text{max\_episodes}, |\text{seeds}|)$ episodes, and isolates agent faults: if an agent raises during \texttt{act} or \texttt{observe}, that episode is terminated, marked failed, its partial trace persisted, and evaluation continues. Success is \emph{honest}: an episode counts as a success only if the environment emits its terminal goal event, never merely from accumulated reward. Planning cost (wall-clock per step, imagined transitions per step, peak traced memory) is logged alongside return so compute-heavy planners cannot be compared as if free.
+
+\begin{algorithm}[t]
+\caption{Evaluation harness for one (environment, agent, track)}\label{alg:harness}
+\KwIn{env id $e$; agent $A$; seeds $S$; track; max episodes $N$; continual schedule $C$ (optional)}
+\KwOut{aggregate stats with bootstrap CIs; episode traces; per-episode transitions}
+$n \gets \max(N, |S|)$; start memory tracing\;
+\For{$\mathrm{ep} \gets 0$ \KwTo $n-1$}{
+  $\mathrm{seed} \gets S[\mathrm{ep} \bmod |S|]$\;
+  \If{$C \neq \varnothing$}{apply drift for phase $\lfloor \mathrm{ep} / C.\text{shift\_every} \rfloor$ to env kwargs\;}
+  $\mathrm{env} \gets \textsc{make\_env}(e,\text{kwargs})$; $\mathrm{obs},\mathrm{info} \gets \mathrm{env}.\textsc{reset}(\mathrm{seed})$; $A.\textsc{reset}(\mathrm{seed})$\;
+  reached\_goal $\gets$ false; failed $\gets$ false\;
+  \While{not done}{
+    \textbf{try} $a \gets A.\textsc{act}(\mathrm{obs},\mathrm{info})$ \textbf{catch} mark failed; \textbf{break}\;
+    $\mathrm{obs}',r,\mathrm{term},\mathrm{trunc},\mathrm{info} \gets \mathrm{env}.\textsc{step}(a)$\;
+    \If{goal event $\in \mathrm{info.events}$}{reached\_goal $\gets$ true\;}
+    \textbf{try} $A.\textsc{observe}(\text{transition})$ \textbf{catch} mark failed; \textbf{break}\;
+    accumulate return, steps, imagined transitions, wall-clock; $\mathrm{obs} \gets \mathrm{obs}'$\;
+  }
+  success $\gets$ reached\_goal $\wedge \neg$ failed; record EpisodeStats(seed)\;
+}
+\Return \textsc{aggregate}(episodes) with per-seed breakdown and bootstrap CIs; traces\;
+\end{algorithm}
+
+\subsection{Planner: MCTS with value bootstrapping}
+Algorithm~\ref{alg:mcts} sketches the search used by the learned-model and privileged-simulator agents. UCT selection, expansion, a bootstrapped leaf value, and discounted backup are standard; the key benchmark-specific choices are the optional leaf \texttt{value\_fn} (so sparse, beyond-horizon goals still inject signal) and seeded tie-breaking at both selection and final action choice.
+
+\begin{algorithm}[t]
+\caption{MCTS plan step (one root action)}\label{alg:mcts}
+\KwIn{root state $s_0$; transition $T$; clone; legal actions; discount $\gamma$; sims $n$; depth $d_{\max}$; optional value\_fn $V$}
+\KwOut{action, value, imagined-transition count, trace}
+create root\;
+\For{$\mathrm{sim} \gets 1$ \KwTo $n$}{
+  $s \gets \textsc{clone}(s_0)$; path $\gets [\text{root}]$; rewards $\gets [\,]$; done $\gets$ false; depth $\gets 0$\;
+  \While{node has children $\wedge \neg$done $\wedge$ depth $< d_{\max}$}{
+    $(a, \text{child}) \gets \textsc{selectUCT}(\text{node})$ \tcp*{seeded tie-break}
+    $s,r,\text{done} \gets T(s,a)$; append $r$; descend; depth\texttt{++}\;
+  }
+  \If{$\neg$done $\wedge$ depth $< d_{\max}$}{expand legal children; descend once via UCT\;}
+  $v_{\text{leaf}} \gets V(s)$ \textbf{if} $V \neq \varnothing \wedge \neg$done \textbf{else} $0$\;
+  $v \gets \sum_t \gamma^t r_t + \gamma^{|\text{rewards}|} v_{\text{leaf}}$\;
+  \ForEach{node in reversed path}{node.visits\texttt{++}; node.value\_sum $\mathrel{+}= v$; $v \gets \gamma v$\;}
+}
+\Return argmax-visits child (seeded tie-break), its value, $n\cdot\max(1,\text{max depth})$, trace\;
+\end{algorithm}
+
+The CEM-MPC planner (used by the imagination agent) is the complementary continuous-search baseline: it maintains a per-timestep categorical action distribution, samples a population of action sequences, scores each by an imagined rollout, refits to the elite fraction with smoothing over several iterations, and returns the first action of the best sequence. Elite selection and the argmax over population scores use the same seeded tie-breaking discipline.
+
+\section{Results Scaffold}
+We do not assert empirical numbers in this manuscript: the tables below are \emph{protocol placeholders} to be filled by running the released harness. They fix the reporting format---anchored reference rows, bootstrap CI columns, and a planning-cost column---so submissions are directly comparable. The honest framing is that the BFS oracle attains success rate $1.00$ by construction and uniform random attains $\approx 0.00$ under sparse reward; every learned method should be read on the interval between these anchors.
+
+\begin{table}[t]
+\centering
+\caption{Test-track results scaffold (MemoryMaze; held-out seeds). Numbers are placeholders to be computed by the harness; $[\cdot,\cdot]$ denotes the 95\% bootstrap CI. Oracle/random rows are anchored references.}
+\label{tab:results-memorymaze}
+\begin{tabular}{lcccc}
+\toprule
+Agent & Success rate (95\% CI) & Mean return (95\% CI) & Median steps & Imagined trans./step \\
+\midrule
+BFS oracle (privileged)        & $1.00$ [$1.00$, $1.00$] & --- & --- & $0$ \\
+Uniform random                 & $\approx 0.00$ [---, ---] & --- & --- & $0$ \\
+Planner / perfect sim          & --- & --- & --- & --- \\
+Learned-model MCTS             & --- & --- & --- & --- \\
+Ensemble CEM-MPC               & --- & --- & --- & --- \\
+Model-free PPO                 & --- & --- & --- & $0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Open-loop $k$-step model-fidelity scaffold (mean absolute reward error; lower is better). Only learned-model agents populate these columns. Placeholders.}
+\label{tab:fidelity}
+\begin{tabular}{lccc}
+\toprule
+Agent & $k{=}1$ & $k{=}5$ & $k{=}10$ \\
+\midrule
+Learned-model MCTS  & --- & --- & --- \\
+Ensemble CEM-MPC    & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Continual-track transfer scaffold. Forward/backward transfer and forgetting are computed from per-phase mean scores. Placeholders.}
+\label{tab:continual}
+\begin{tabular}{lccc}
+\toprule
+Agent & Forward transfer & Backward transfer & Forgetting \\
+\midrule
+Ensemble CEM-MPC  & --- & --- & --- \\
+Model-free PPO    & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Platform and Reproducibility}
-The platform includes a FastAPI backend with SQLite persistence, artifact uploads, leaderboard queries, and task/run discovery endpoints. A Next.js dashboard and Expo mobile viewer expose task browsing, leaderboard filtering, and trace visualization. Docker and CI workflows support CPU-first reproducibility.
+The platform includes a FastAPI backend with SQLite persistence and Alembic migrations, exposing run submission (\texttt{POST /api/runs}), artifact upload (\texttt{/api/runs/\{id\}/upload}), leaderboard queries (\texttt{/api/leaderboard}), task discovery (\texttt{/api/tasks}), per-run metrics/trace/config endpoints, and health/readiness probes; an authenticated trigger endpoint enqueues evaluation jobs to a background worker with rate limiting. A Next.js dashboard and an Expo (React Native) mobile viewer expose task browsing, leaderboard filtering, and episode-trace visualization over the standardized trace schema. The benchmark code is organized as four installable Python packages---core (environments, evaluation harness, metrics, trace schema), planners (MCTS, CEM-MPC), worldmodels (deterministic, stochastic, ensemble), and agents---plus the server. Docker images and CI workflows (including a LaTeX build of this manuscript) support CPU-first reproducibility; all stochastic components are seeded so a given seed reproduces identical action sequences and updates.
 
 \section{Limitations and Ethics}
-Benchmark optimization can incentivize compute-heavy planning strategies; we therefore log and display planning cost alongside return. Synthetic tasks do not guarantee real-world transfer, and procedural generation may still admit exploitable artifacts. Released traces may leak structural priors if not carefully partitioned. We encourage reporting uncertainty, compute budgets, and failure modes in all submissions.
+Benchmark optimization can incentivize compute-heavy planning strategies; we therefore log and display planning cost alongside return. Synthetic tasks do not guarantee real-world transfer, and procedural generation may still admit exploitable artifacts. Released traces may leak structural priors if not carefully partitioned. The privileged oracles depend on exact simulator access and a hand-specified subgoal heuristic; they bound achievable performance but are not learned and should not be cited as learning results. We encourage reporting uncertainty (via the provided bootstrap CIs), compute budgets, and failure modes in all submissions.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}

@@ -162,10 +162,13 @@ function UploadStudio() {
       <div className="grid gap-10 xl:grid-cols-[1.04fr_0.96fr]">
         <form onSubmit={handleSubmit} className="rounded-[32px] border border-[rgba(185,174,195,0.46)] bg-[rgba(255,255,255,0.78)] px-6 py-8 shadow-[0_22px_54px_rgba(33,24,43,0.06)] md:px-8">
           <div className="grid gap-5 md:grid-cols-2">
-            <label className="block md:col-span-2">
+            <label htmlFor="upload-api-key" className="block md:col-span-2">
               <span className="text-sm font-semibold text-[var(--ink)]">Writer API Key</span>
               <input
+                id="upload-api-key"
+                name="api-key"
                 type="password"
+                autoComplete="off"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
                 placeholder="wmg_..."
@@ -173,9 +176,12 @@ function UploadStudio() {
               />
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-env" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Environment</span>
               <select
+                id="upload-env"
+                name="env"
+                autoComplete="off"
                 value={form.env}
                 onChange={(event) => setForm((current) => ({ ...current, env: event.target.value }))}
                 className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
@@ -188,9 +194,12 @@ function UploadStudio() {
               </select>
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-agent" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Agent</span>
               <select
+                id="upload-agent"
+                name="agent"
+                autoComplete="off"
                 value={form.agent}
                 onChange={(event) => setForm((current) => ({ ...current, agent: event.target.value }))}
                 className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
@@ -203,9 +212,12 @@ function UploadStudio() {
               </select>
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-track" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Track</span>
               <select
+                id="upload-track"
+                name="track"
+                autoComplete="off"
                 value={form.track}
                 onChange={(event) => setForm((current) => ({ ...current, track: event.target.value }))}
                 className="mt-2 w-full rounded-[18px] border border-[rgba(185,174,195,0.46)] bg-white/90 px-4 py-4 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]"
@@ -218,10 +230,13 @@ function UploadStudio() {
               </select>
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-run-id" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Optional Run ID</span>
               <input
+                id="upload-run-id"
+                name="run-id"
                 type="text"
+                autoComplete="off"
                 value={form.id ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, id: event.target.value }))}
                 placeholder="Leave blank to auto-generate"
@@ -229,9 +244,11 @@ function UploadStudio() {
               />
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-metrics-file" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Metrics File</span>
               <input
+                id="upload-metrics-file"
+                name="metrics-file"
                 type="file"
                 accept=".json,application/json"
                 onChange={(event) => setMetricsFile(event.target.files?.[0] ?? null)}
@@ -239,9 +256,11 @@ function UploadStudio() {
               />
             </label>
 
-            <label className="block">
+            <label htmlFor="upload-trace-file" className="block">
               <span className="text-sm font-semibold text-[var(--ink)]">Trace File</span>
               <input
+                id="upload-trace-file"
+                name="trace-file"
                 type="file"
                 accept=".jsonl,.txt,application/json"
                 onChange={(event) => setTraceFile(event.target.files?.[0] ?? null)}
@@ -249,9 +268,11 @@ function UploadStudio() {
               />
             </label>
 
-            <label className="block md:col-span-2">
+            <label htmlFor="upload-config-file" className="block md:col-span-2">
               <span className="text-sm font-semibold text-[var(--ink)]">Config File</span>
               <input
+                id="upload-config-file"
+                name="config-file"
                 type="file"
                 accept=".yaml,.yml,.json,.txt,text/plain,application/json"
                 onChange={(event) => setConfigFile(event.target.files?.[0] ?? null)}
@@ -260,25 +281,33 @@ function UploadStudio() {
             </label>
           </div>
 
-          {error ? (
-            <div className="mt-5 rounded-[20px] border border-[rgba(216,160,111,0.62)] bg-[#fff0e3] px-4 py-4 text-sm text-[#7a4a24]">
-              {error}
-            </div>
-          ) : null}
-
-          {result ? (
-            <div className="mt-5 rounded-[20px] border border-[rgba(166,200,160,0.8)] bg-[#eef7ea] px-4 py-4 text-sm text-[#355b2f]">
-              Run <span className="font-mono">{result.id}</span> published successfully.
-              <div className="mt-3 flex flex-wrap gap-3">
-                <Link href={`/runs/${result.id}`} className="button-primary px-4 py-3 text-sm font-semibold">
-                  Open Run Page
-                </Link>
-                <Link href="/leaderboard" className="button-secondary px-4 py-3 text-sm font-semibold">
-                  View Leaderboard
-                </Link>
+          <div aria-live="polite" aria-atomic="true">
+            {error ? (
+              <div
+                role="alert"
+                className="mt-5 rounded-[20px] border border-[rgba(216,160,111,0.62)] bg-[#fff0e3] px-4 py-4 text-sm text-[#7a4a24]"
+              >
+                {error}
               </div>
-            </div>
-          ) : null}
+            ) : null}
+
+            {result ? (
+              <div
+                role="status"
+                className="mt-5 rounded-[20px] border border-[rgba(166,200,160,0.8)] bg-[#eef7ea] px-4 py-4 text-sm text-[#355b2f]"
+              >
+                Run <span className="font-mono">{result.id}</span> published successfully.
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <Link href={`/runs/${result.id}`} className="button-primary px-4 py-3 text-sm font-semibold">
+                    Open Run Page
+                  </Link>
+                  <Link href="/leaderboard" className="button-secondary px-4 py-3 text-sm font-semibold">
+                    View Leaderboard
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
             <button

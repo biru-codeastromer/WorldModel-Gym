@@ -14,6 +14,11 @@ import {
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+type Task = {
+  id: string;
+  description: string;
+};
+
 type LeaderboardRow = {
   run_id: string;
   env: string;
@@ -22,13 +27,96 @@ type LeaderboardRow = {
   mean_return: number;
 };
 
+type RunData = {
+  id: string;
+  env: string;
+  agent: string;
+  track: string;
+  metrics: { success_rate?: number } | null;
+};
+
+/** Coerce an unknown value into a finite number, or null if it isn't one. */
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Format a possibly-missing numeric metric, falling back to a dash. */
+function formatMetric(value: unknown, digits = 2): string {
+  const num = toFiniteNumber(value);
+  return num === null ? "—" : num.toFixed(digits);
+}
+
+function toStringOr(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** Pull a clean list of tasks out of an arbitrary JSON payload. */
+function parseTasks(json: unknown): Task[] {
+  if (!isRecord(json) || !Array.isArray(json.tasks)) {
+    return [];
+  }
+  return json.tasks.filter(isRecord).map((raw, index) => ({
+    id: toStringOr(raw.id, `task-${index}`),
+    description: toStringOr(raw.description, "")
+  }));
+}
+
+/** Pull a clean list of leaderboard rows out of an arbitrary JSON payload. */
+function parseLeaderboard(json: unknown): LeaderboardRow[] {
+  if (!Array.isArray(json)) {
+    return [];
+  }
+  return json.filter(isRecord).map((raw, index) => ({
+    run_id: toStringOr(raw.run_id, `run-${index}`),
+    env: toStringOr(raw.env, "unknown"),
+    agent: toStringOr(raw.agent, "unknown"),
+    success_rate: toFiniteNumber(raw.success_rate) ?? NaN,
+    mean_return: toFiniteNumber(raw.mean_return) ?? NaN
+  }));
+}
+
+/** Pull a clean run summary out of an arbitrary JSON payload. */
+function parseRun(json: unknown): RunData {
+  const raw = isRecord(json) ? json : {};
+  return {
+    id: toStringOr(raw.id, "unknown"),
+    env: toStringOr(raw.env, "unknown"),
+    agent: toStringOr(raw.agent, "unknown"),
+    track: toStringOr(raw.track, "unknown"),
+    metrics: isRecord(raw.metrics)
+      ? { success_rate: toFiniteNumber(raw.metrics.success_rate) ?? undefined }
+      : null
+  };
+}
+
+/** Fetch JSON with status + network error handling. */
+async function fetchJson(path: string): Promise<unknown> {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return "Could not reach the server. Check your connection and try again.";
+}
+
 export default function App() {
   const [tab, setTab] = useState<"tasks" | "leaderboard" | "run">("tasks");
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [runId, setRunId] = useState("");
-  const [runData, setRunData] = useState<any | null>(null);
+  const [runData, setRunData] = useState<RunData | null>(null);
 
   useEffect(() => {
     if (tab === "tasks") {
@@ -41,10 +129,13 @@ export default function App() {
 
   async function loadTasks() {
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/tasks`);
-      const json = await res.json();
-      setTasks(json.tasks ?? []);
+      const json = await fetchJson("/api/tasks");
+      setTasks(parseTasks(json));
+    } catch (err) {
+      setTasks([]);
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -52,26 +143,43 @@ export default function App() {
 
   async function loadLeaderboard() {
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/leaderboard?track=test`);
-      const json = (await res.json()) as LeaderboardRow[];
-      setLeaderboard(json);
+      const json = await fetchJson("/api/leaderboard?track=test");
+      setLeaderboard(parseLeaderboard(json));
+    } catch (err) {
+      setLeaderboard([]);
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   }
 
   async function loadRun() {
-    if (!runId.trim()) {
+    const id = runId.trim();
+    if (!id) {
       return;
     }
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/runs/${runId.trim()}`);
-      const json = await res.json();
-      setRunData(json);
+      const json = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
+      setRunData(parseRun(json));
+    } catch (err) {
+      setRunData(null);
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function retry() {
+    if (tab === "tasks") {
+      void loadTasks();
+    } else if (tab === "leaderboard") {
+      void loadLeaderboard();
+    } else {
+      void loadRun();
     }
   }
 
@@ -96,11 +204,24 @@ export default function App() {
 
         {loading ? <ActivityIndicator size="large" color="#ff7a3d" /> : null}
 
-        {tab === "tasks" ? (
+        {error && !loading ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>Something went wrong</Text>
+            <Text style={styles.errorBody}>{error}</Text>
+            <Pressable onPress={retry} style={styles.retryButton}>
+              <Text style={styles.buttonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {tab === "tasks" && !error ? (
           <FlatList
             data={tasks}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => item.id || `task-${index}`}
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+            ListEmptyComponent={
+              loading ? null : <Text style={styles.body}>No tasks available.</Text>
+            }
             renderItem={({ item }) => (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>{item.id}</Text>
@@ -110,17 +231,23 @@ export default function App() {
           />
         ) : null}
 
-        {tab === "leaderboard" ? (
+        {tab === "leaderboard" && !error ? (
           <FlatList
             data={leaderboard}
-            keyExtractor={(item) => item.run_id}
+            keyExtractor={(item, index) => item.run_id || `run-${index}`}
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
-            ListEmptyComponent={<Text style={styles.body}>No runs uploaded yet.</Text>}
+            ListEmptyComponent={
+              loading ? null : <Text style={styles.body}>No runs uploaded yet.</Text>
+            }
             renderItem={({ item }) => (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>{item.run_id}</Text>
-                <Text style={styles.body}>{item.env} | {item.agent}</Text>
-                <Text style={styles.body}>Success {item.success_rate.toFixed(2)} | Return {item.mean_return.toFixed(2)}</Text>
+                <Text style={styles.body}>
+                  {item.env} | {item.agent}
+                </Text>
+                <Text style={styles.body}>
+                  Success {formatMetric(item.success_rate)} | Return {formatMetric(item.mean_return)}
+                </Text>
               </View>
             )}
           />
@@ -138,17 +265,17 @@ export default function App() {
             <Pressable onPress={loadRun} style={styles.button}>
               <Text style={styles.buttonText}>Load Run</Text>
             </Pressable>
-            {runData ? (
+            {runData && !error ? (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>{runData.id}</Text>
                 <Text style={styles.body}>Agent: {runData.agent}</Text>
                 <Text style={styles.body}>Env: {runData.env}</Text>
                 <Text style={styles.body}>Track: {runData.track}</Text>
-                <Text style={styles.body}>Success: {(runData.metrics?.success_rate ?? 0).toFixed(2)}</Text>
+                <Text style={styles.body}>Success: {formatMetric(runData.metrics?.success_rate)}</Text>
               </View>
-            ) : (
+            ) : !error ? (
               <Text style={styles.body}>Load a run to see summary metrics.</Text>
-            )}
+            ) : null}
           </ScrollView>
         ) : null}
       </View>
@@ -194,6 +321,24 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#10213a" },
   body: { color: "#44506a", fontSize: 13 },
+  errorCard: {
+    backgroundColor: "#fff1ec",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#ffd2c2"
+  },
+  errorTitle: { fontSize: 15, fontWeight: "700", color: "#b23a17" },
+  errorBody: { color: "#8a4a35", fontSize: 13 },
+  retryButton: {
+    backgroundColor: "#ff7a3d",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+    alignSelf: "flex-start"
+  },
   input: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
