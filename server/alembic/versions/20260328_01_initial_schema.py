@@ -168,10 +168,10 @@ def downgrade() -> None:
     if "api_keys" in tables:
         op.drop_table("api_keys")
 
+    # True inverse of upgrade(): the initial revision creates both tables, so
+    # downgrading to base must drop them. (Dropping the table also removes any
+    # indexes attached to it, so we don't need to drop those individually —
+    # which on sqlite would otherwise force a batch table-rebuild that races
+    # with later-revision columns.)
     if "runs" in tables:
-        with op.batch_alter_table("runs") as batch:
-            columns = {column["name"] for column in inspector.get_columns("runs")}
-            if "created_by" in columns:
-                batch.drop_column("created_by")
-            if "storage_backend" in columns:
-                batch.drop_column("storage_backend")
+        op.drop_table("runs")

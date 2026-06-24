@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from worldmodel_server.db import Base
@@ -15,11 +15,29 @@ def utcnow() -> datetime:
 class RunEntry(Base):
     __tablename__ = "runs"
 
+    __table_args__ = (
+        # Supports the leaderboard hot path:
+        #   WHERE status='uploaded' AND track=? [AND env=? AND agent=?]
+        #   ORDER BY success_rate DESC, mean_return DESC, created_at DESC
+        # Leading `track` matches the always-present equality filter; the
+        # remaining columns let the database satisfy the ORDER BY (and LIMIT
+        # for pagination) directly from the index instead of a full-table sort.
+        Index(
+            "ix_runs_leaderboard",
+            "track",
+            "success_rate",
+            "mean_return",
+            "created_at",
+        ),
+    )
+
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     env: Mapped[str] = mapped_column(String(64), index=True)
     agent: Mapped[str] = mapped_column(String(64), index=True)
     track: Mapped[str] = mapped_column(String(32), index=True)
     status: Mapped[str] = mapped_column(String(32), default="created")
+    success_rate: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    mean_return: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     metrics_json: Mapped[str] = mapped_column(Text, default="{}")
     trace_path: Mapped[str] = mapped_column(Text, default="")
     config_path: Mapped[str] = mapped_column(Text, default="")

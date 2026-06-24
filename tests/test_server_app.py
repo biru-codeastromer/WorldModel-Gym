@@ -220,3 +220,212 @@ def test_bootstrap_api_key_is_created_once(tmp_path, monkeypatch):
         with session_local() as session:
             keys = session.query(api_key_model).all()
             assert len(keys) == 1
+
+
+def _make_writer_client(modules):
+    app = modules["worldmodel_server.main"].app
+    create_api_key = modules["worldmodel_server.auth"].create_api_key
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    client = TestClient(app)
+    client.__enter__()
+    with session_local() as session:
+        _, secret = create_api_key(session, name="writer", scopes=["runs:write"])
+    return client, secret
+
+
+def _upload_run(client, secret, run_id, success_rate, mean_return):
+    client.post(
+        "/api/runs",
+        json={"id": run_id, "env": "memory_maze", "agent": run_id, "track": "test"},
+        headers={"x-api-key": secret},
+    )
+    return client.post(
+        f"/api/runs/{run_id}/upload",
+        headers={"x-api-key": secret},
+        files={
+            "metrics_file": (
+                "metrics.json",
+                json.dumps({"success_rate": success_rate, "mean_return": mean_return}),
+                "application/json",
+            )
+        },
+    )
+
+
+def test_leaderboard_pagination_limit_and_offset(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    try:
+        _upload_run(client, secret, "run_a", 0.90, 0.9)
+        _upload_run(client, secret, "run_b", 0.80, 0.8)
+        _upload_run(client, secret, "run_c", 0.70, 0.7)
+
+        page1 = client.get("/api/leaderboard?track=test&limit=2&offset=0").json()
+        page2 = client.get("/api/leaderboard?track=test&limit=2&offset=2").json()
+    finally:
+        client.__exit__(None, None, None)
+
+    assert [r["run_id"] for r in page1] == ["run_a", "run_b"]
+    assert [r["run_id"] for r in page2] == ["run_c"]
+
+
+def test_leaderboard_limit_bounds_enforced(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    try:
+        too_small = client.get("/api/leaderboard?track=test&limit=0")
+        too_large = client.get("/api/leaderboard?track=test&limit=99999")
+        negative_offset = client.get("/api/leaderboard?track=test&offset=-1")
+        ok = client.get("/api/leaderboard?track=test&limit=500")
+    finally:
+        client.__exit__(None, None, None)
+
+    assert too_small.status_code == 422
+    assert too_large.status_code == 422
+    assert negative_offset.status_code == 422
+    assert ok.status_code == 200
+
+
+def test_leaderboard_ranked_by_sql_columns(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    try:
+        _upload_run(client, secret, "low_run", 0.20, 0.18)
+        _upload_run(client, secret, "high_run", 0.90, 0.85)
+        _upload_run(client, secret, "mid_run", 0.50, 0.50)
+
+        rows = client.get("/api/leaderboard?track=test").json()
+
+        run_model = modules["worldmodel_server.models"].RunEntry
+        session_local = modules["worldmodel_server.db"].SessionLocal
+        with session_local() as session:
+            high = session.get(run_model, "high_run")
+            assert high.success_rate == 0.90
+            assert high.mean_return == 0.85
+    finally:
+        client.__exit__(None, None, None)
+
+    assert [r["run_id"] for r in rows] == ["high_run", "mid_run", "low_run"]
+
+
+def test_oversized_upload_rejected_with_413(tmp_path, monkeypatch):
+    monkeypatch.setenv("WMG_MAX_UPLOAD_BYTES", "1024")
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    try:
+        client.post(
+            "/api/runs",
+            json={"id": "big_run", "env": "memory_maze", "agent": "x", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        oversized = client.post(
+            "/api/runs/big_run/upload",
+            headers={"x-api-key": secret},
+            files={"metrics_file": ("metrics.json", b"a" * 4096, "application/json")},
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+    assert oversized.status_code == 413
+
+
+def test_oversized_upload_leaves_no_artifact(tmp_path, monkeypatch):
+    monkeypatch.setenv("WMG_MAX_UPLOAD_BYTES", "1024")
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    storage_dir = tmp_path / "storage"
+    try:
+        client.post(
+            "/api/runs",
+            json={"id": "big_run", "env": "memory_maze", "agent": "x", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        client.post(
+            "/api/runs/big_run/upload",
+            headers={"x-api-key": secret},
+            files={"metrics_file": ("metrics.json", b"a" * 4096, "application/json")},
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+    assert not (storage_dir / "big_run").exists()
+
+
+def test_readyz_uses_write_probe(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+    main_mod = modules["worldmodel_server.main"]
+
+    calls = {"n": 0}
+    original = main_mod.storage_write_probe
+
+    def spy():
+        calls["n"] += 1
+        return original()
+
+    monkeypatch.setattr(main_mod, "storage_write_probe", spy)
+
+    with TestClient(app) as client:
+        response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert calls["n"] >= 1
+    assert response.json()["checks"]["storage"]["ok"] is True
+
+
+def test_upload_commit_failure_leaves_no_orphan_artifact(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    storage_dir = tmp_path / "storage"
+    run_id = "commit_fail_run"
+    try:
+        client.post(
+            "/api/runs",
+            json={"id": run_id, "env": "memory_maze", "agent": "x", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+
+        from sqlalchemy.orm import Session as SASession
+
+        original_commit = SASession.commit
+
+        def boom(self):
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(SASession, "commit", boom)
+
+        resp = client.post(
+            f"/api/runs/{run_id}/upload",
+            headers={"x-api-key": secret},
+            files={
+                "metrics_file": (
+                    "metrics.json",
+                    json.dumps({"success_rate": 0.5, "mean_return": 0.5}),
+                    "application/json",
+                )
+            },
+        )
+
+        monkeypatch.setattr(SASession, "commit", original_commit)
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 500
+    assert not (storage_dir / run_id / "metrics.json").exists()
+
+
+def test_reupload_is_idempotent(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    client, secret = _make_writer_client(modules)
+    try:
+        first = _upload_run(client, secret, "redo_run", 0.3, 0.3)
+        second = _upload_run(client, secret, "redo_run", 0.7, 0.7)
+        rows = client.get("/api/leaderboard?track=test").json()
+    finally:
+        client.__exit__(None, None, None)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    matching = [r for r in rows if r["run_id"] == "redo_run"]
+    assert len(matching) == 1
+    assert matching[0]["success_rate"] == 0.7

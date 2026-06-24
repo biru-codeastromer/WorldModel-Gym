@@ -1,13 +1,40 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from worldmodel_server.models import RunEntry
-from worldmodel_server.storage import save_run_artifact, storage_status
+from worldmodel_server.storage import (
+    LocalArtifactStore,
+    S3ArtifactStore,
+    get_store,
+    save_run_artifact,
+    storage_status,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _best_effort_delete(keys: list[str]) -> None:
+    """Best-effort removal of artifacts written during a failed seed run."""
+    if not keys:
+        return
+    store = get_store()
+    for key in keys:
+        try:
+            if isinstance(store, LocalArtifactStore):
+                Path(key).unlink(missing_ok=True)
+            elif isinstance(store, S3ArtifactStore):
+                store.client.delete_object(Bucket=store.bucket, Key=key)
+        except (OSError, BotoCoreError, ClientError) as exc:
+            logger.warning("failed to clean up seed artifact %s: %s", key, exc)
+
 
 DEMO_RUNS = [
     {
@@ -62,6 +89,7 @@ def seed_demo_runs(session: Session, *, force: bool = False) -> int:
 
     created_count = 0
     now = datetime.now(UTC).replace(tzinfo=None)
+    written_keys: list[str] = []
 
     for spec in DEMO_RUNS:
         item = session.get(RunEntry, spec["id"])
@@ -101,9 +129,14 @@ def seed_demo_runs(session: Session, *, force: bool = False) -> int:
             "seeded: true\n"
         )
 
-        save_run_artifact(spec["id"], "metrics.json", json.dumps(metrics, indent=2).encode("utf-8"))
+        metrics_key = save_run_artifact(
+            spec["id"], "metrics.json", json.dumps(metrics, indent=2).encode("utf-8")
+        )
+        written_keys.append(metrics_key)
         trace_key = save_run_artifact(spec["id"], "trace.jsonl", f"{trace_lines}\n".encode("utf-8"))
+        written_keys.append(trace_key)
         config_key = save_run_artifact(spec["id"], "config.yaml", config_text.encode("utf-8"))
+        written_keys.append(config_key)
 
         created_at = now - timedelta(hours=int(spec["created_offset_hours"]))
         session.add(
@@ -113,6 +146,8 @@ def seed_demo_runs(session: Session, *, force: bool = False) -> int:
                 agent=str(spec["agent"]),
                 track=str(spec["track"]),
                 status="uploaded",
+                success_rate=float(spec["success_rate"]),
+                mean_return=float(spec["mean_return"]),
                 metrics_json=json.dumps(metrics),
                 trace_path=trace_key,
                 config_path=config_key,
@@ -124,5 +159,12 @@ def seed_demo_runs(session: Session, *, force: bool = False) -> int:
         )
         created_count += 1
 
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        # The metadata commit failed after artifacts were written: roll back and
+        # best-effort delete the orphaned artifacts so storage stays consistent.
+        session.rollback()
+        _best_effort_delete(written_keys)
+        raise
     return created_count

@@ -5,7 +5,7 @@ import hmac
 import json
 import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Iterable
 
 from fastapi import Depends, Header, HTTPException, status
@@ -15,6 +15,12 @@ from sqlalchemy.orm import Session
 from worldmodel_server.config import settings
 from worldmodel_server.db import get_session
 from worldmodel_server.models import ApiKey
+
+# Minimum interval between `last_used_at` writes for a given key. Authenticated
+# requests are on the write hot path, so we avoid issuing an UPDATE + COMMIT on
+# every call and instead refresh this column at most once per window. The value
+# only needs to be coarse enough to track recent activity, not exact.
+LAST_USED_REFRESH_INTERVAL = timedelta(seconds=60)
 
 
 @dataclass(frozen=True)
@@ -122,6 +128,25 @@ def _find_api_key(session: Session, token: str) -> ApiKey | None:
     )
 
 
+def _touch_last_used(session: Session, api_key: ApiKey, now: datetime) -> None:
+    """Refresh ``last_used_at`` at most once per ``LAST_USED_REFRESH_INTERVAL``.
+
+    Keeps authentication off the write hot path: most requests skip the
+    UPDATE + COMMIT entirely. The write is best-effort, so a failure here must
+    never block an otherwise-valid authenticated request.
+    """
+    last_used = api_key.last_used_at
+    if last_used is not None and (now - last_used) < LAST_USED_REFRESH_INTERVAL:
+        return
+
+    api_key.last_used_at = now
+    session.add(api_key)
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+
+
 def get_authenticated_principal(
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
@@ -132,9 +157,7 @@ def get_authenticated_principal(
     if token:
         api_key = _find_api_key(session, token)
         if api_key:
-            api_key.last_used_at = datetime.now(UTC).replace(tzinfo=None)
-            session.add(api_key)
-            session.commit()
+            _touch_last_used(session, api_key, datetime.now(UTC).replace(tzinfo=None))
             return AuthenticatedPrincipal(
                 kind="api_key",
                 identifier=api_key.key_prefix,

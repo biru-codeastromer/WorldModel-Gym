@@ -6,6 +6,15 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from worldmodel_server.config import settings
 
+# Connection pool checkout timeout (seconds): how long a request waits for a
+# free pooled connection before erroring instead of blocking indefinitely.
+DB_POOL_TIMEOUT_SECONDS = 30
+
+# Server-side statement timeout (milliseconds) applied to postgres connections
+# so a runaway query is cancelled rather than holding a connection forever.
+# Applied only to postgres -- sqlite does not support this option.
+DB_STATEMENT_TIMEOUT_MS = 30_000
+
 
 class Base(DeclarativeBase):
     pass
@@ -20,6 +29,11 @@ def build_engine_kwargs(db_url: str) -> dict:
         engine_kwargs["pool_pre_ping"] = True
         engine_kwargs["pool_size"] = settings.db_pool_size
         engine_kwargs["max_overflow"] = settings.db_max_overflow
+        engine_kwargs["pool_timeout"] = DB_POOL_TIMEOUT_SECONDS
+        if url.get_backend_name() == "postgresql":
+            engine_kwargs["connect_args"] = {
+                "options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}",
+            }
     return engine_kwargs
 
 

@@ -5,7 +5,9 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from worldmodel_server.auth import AuthenticatedPrincipal, ensure_bootstrap_api_key, require_scope
 from worldmodel_server.config import settings
-from worldmodel_server.db import SessionLocal, describe_database, get_session
+from worldmodel_server.db import SessionLocal, describe_database, engine, get_session
 from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
 from worldmodel_server.rate_limit import rate_limiter
@@ -22,14 +24,27 @@ from worldmodel_server.request_logging import configure_logging, log_request_eve
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
 from worldmodel_server.seed import seed_demo_runs
 from worldmodel_server.storage import (
+    LocalArtifactStore,
+    S3ArtifactStore,
     artifact_key,
     ensure_storage_dirs,
+    get_store,
     load_json,
     load_run_artifact,
     save_run_artifact,
     storage_status,
+    storage_write_probe,
     validate_run_id,
 )
+
+# Hard ceiling on leaderboard page size, regardless of the requested ``limit``,
+# so a single request can never force the database to materialize an unbounded
+# result set.
+LEADERBOARD_MAX_LIMIT = 500
+LEADERBOARD_DEFAULT_LIMIT = 100
+
+# Chunk size for the streaming, size-bounded upload reader.
+UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
 
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
@@ -81,7 +96,20 @@ async def lifespan(_app: FastAPI):
             error=str(exc),
         )
         raise
-    yield
+    try:
+        yield
+    finally:
+        # Graceful shutdown: close pooled DB connections so they are not left
+        # dangling (important for postgres in production).
+        try:
+            engine.dispose()
+            log_system_event("shutdown_complete", environment=settings.environment)
+        except Exception as exc:  # pragma: no cover - best-effort cleanup
+            log_system_event(
+                "shutdown_engine_dispose_failed",
+                level=logging.WARNING,
+                error=str(exc),
+            )
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -236,6 +264,7 @@ def create_run(
 
 @app.post("/api/runs/{run_id}/upload", response_model=RunResponse)
 async def upload_run_artifacts(
+    request: Request,
     run_id: str,
     metrics_file: UploadFile | None = File(default=None),
     trace_file: UploadFile | None = File(default=None),
@@ -244,28 +273,62 @@ async def upload_run_artifacts(
     principal: AuthenticatedPrincipal = Depends(_require_write_access),
 ):
     item = _get_run_or_404(session, run_id)
-    metrics_bytes: bytes | None = None
 
-    if metrics_file is not None:
-        metrics_bytes = await _read_upload_bytes(metrics_file)
-        save_run_artifact(run_id, "metrics.json", metrics_bytes)
-    if trace_file is not None:
-        item.trace_path = save_run_artifact(
-            run_id, "trace.jsonl", await _read_upload_bytes(trace_file)
+    # Read every upload body up front (streaming + size-bounded) before touching
+    # storage. A 413 here must not leave any artifacts behind.
+    metrics_bytes = await _read_upload_bytes(metrics_file) if metrics_file else None
+    trace_bytes = await _read_upload_bytes(trace_file) if trace_file else None
+    config_bytes = await _read_upload_bytes(config_file) if config_file else None
+
+    # Track keys written in THIS request so we can best-effort delete them if the
+    # DB commit fails (avoids orphaned artifacts) or if a later storage write
+    # raises (avoids partial state). Re-upload overwrites by key, so writing the
+    # same run_id twice is idempotent.
+    written_keys: list[str] = []
+    try:
+        if metrics_bytes is not None:
+            written_keys.append(save_run_artifact(run_id, "metrics.json", metrics_bytes))
+        if trace_bytes is not None:
+            item.trace_path = save_run_artifact(run_id, "trace.jsonl", trace_bytes)
+            written_keys.append(item.trace_path)
+        if config_bytes is not None:
+            item.config_path = save_run_artifact(run_id, "config.yaml", config_bytes)
+            written_keys.append(item.config_path)
+    except (OSError, BotoCoreError, ClientError) as exc:
+        session.rollback()
+        _best_effort_delete(written_keys, request_id=_request_id(request))
+        log_system_event(
+            "upload_storage_write_failed",
+            level=logging.ERROR,
+            request_id=_request_id(request),
+            run_id=run_id,
+            error=str(exc),
         )
-    if config_file is not None:
-        item.config_path = save_run_artifact(
-            run_id, "config.yaml", await _read_upload_bytes(config_file)
-        )
+        raise HTTPException(status_code=502, detail="failed to persist run artifacts") from exc
 
     if metrics_bytes is not None:
-        item.metrics_json = json.dumps(_parse_metrics_from_bytes(metrics_bytes))
+        metrics = _parse_metrics_from_bytes(metrics_bytes)
+        item.metrics_json = json.dumps(metrics)
+        item.success_rate = _coerce_float(metrics.get("success_rate"))
+        item.mean_return = _coerce_float(metrics.get("mean_return"))
     item.status = "uploaded"
     item.storage_backend = storage_status()["backend"]
     item.created_by = principal.identifier
 
     session.add(item)
-    session.commit()
+    try:
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        _best_effort_delete(written_keys, request_id=_request_id(request))
+        log_system_event(
+            "upload_commit_failed",
+            level=logging.ERROR,
+            request_id=_request_id(request),
+            run_id=run_id,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=500, detail="failed to record run metadata") from exc
     session.refresh(item)
 
     return _to_response(item)
@@ -277,6 +340,8 @@ def leaderboard(
     env: str | None = Query(default=None),
     agent: str | None = Query(default=None),
     include_demo: bool = Query(default=False),
+    limit: int = Query(default=LEADERBOARD_DEFAULT_LIMIT, ge=1, le=LEADERBOARD_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
 ):
     q = select(RunEntry).where(RunEntry.status == "uploaded", RunEntry.track == track)
@@ -287,9 +352,22 @@ def leaderboard(
     if not include_demo:
         q = q.where(RunEntry.created_by != "demo-seed")
 
-    rows = session.scalars(q.order_by(desc(RunEntry.created_at))).all()
-    out: list[LeaderboardRow] = []
+    # Rank entirely in SQL using the denormalized columns (backed by
+    # ix_runs_leaderboard): best success_rate first, ties broken on mean_return
+    # then most-recent submission. LIMIT/OFFSET paginate at the database so we
+    # never materialize the full table.
+    q = (
+        q.order_by(
+            desc(RunEntry.success_rate),
+            desc(RunEntry.mean_return),
+            desc(RunEntry.created_at),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
 
+    rows = session.scalars(q).all()
+    out: list[LeaderboardRow] = []
     for row in rows:
         metrics = _parse_metrics(row.metrics_json)
         out.append(
@@ -298,28 +376,30 @@ def leaderboard(
                 env=row.env,
                 agent=row.agent,
                 track=row.track,
-                success_rate=float(metrics.get("success_rate", 0.0)),
-                mean_return=float(metrics.get("mean_return", 0.0)),
+                success_rate=row.success_rate,
+                mean_return=row.mean_return,
                 planning_cost_ms_per_step=float(
                     metrics.get("planning_cost", {}).get("wall_clock_ms_per_step", 0.0)
                 ),
                 created_at=row.created_at,
             )
         )
-
-    # A leaderboard ranks by performance, not upload recency: best success_rate
-    # first, breaking ties on mean_return then most-recent submission.
-    out.sort(key=lambda row: (row.success_rate, row.mean_return, row.created_at), reverse=True)
     return out
 
 
 @app.get("/api/tasks")
-def tasks():
+def tasks(request: Request):
     try:
         from worldmodel_gym.envs.registry import list_tasks
 
         return {"tasks": list_tasks()}
-    except Exception:
+    except Exception as exc:
+        log_system_event(
+            "tasks_registry_unavailable",
+            level=logging.WARNING,
+            request_id=_request_id(request),
+            error=str(exc),
+        )
         return {
             "tasks": [
                 {"id": "memory_maze", "description": "Grid POMDP with key-door dependency"},
@@ -342,12 +422,25 @@ def get_trace(run_id: str, session: Session = Depends(get_session)):
 
 
 @app.get("/api/runs/{run_id}/metrics")
-def get_metrics(run_id: str, session: Session = Depends(get_session)):
+def get_metrics(request: Request, run_id: str, session: Session = Depends(get_session)):
     item = _get_run_or_404(session, run_id)
     key = artifact_key(item.id, "metrics.json")
     try:
         return _artifact_response(key, "application/json", "metrics not found")
     except HTTPException:
+        # The stored artifact is missing; fall back to the metrics snapshot we
+        # persisted on the row. (A genuine 404 here is expected, not an error.)
+        return JSONResponse(_parse_metrics(item.metrics_json))
+    except (OSError, BotoCoreError, ClientError) as exc:
+        # A transient storage failure (not a missing key) -- log it with the
+        # request id instead of silently masking it, then serve the DB snapshot.
+        log_system_event(
+            "metrics_artifact_read_failed",
+            level=logging.WARNING,
+            request_id=_request_id(request),
+            run_id=run_id,
+            error=str(exc),
+        )
         return JSONResponse(_parse_metrics(item.metrics_json))
 
 
@@ -415,6 +508,42 @@ def _parse_metrics_from_bytes(data: bytes) -> dict:
         return {}
 
 
+def _coerce_float(value: object) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _request_id(request: Request) -> str | None:
+    return getattr(request.state, "request_id", None)
+
+
+def _best_effort_delete(keys: list[str], *, request_id: str | None = None) -> None:
+    """Best-effort removal of artifacts written during a failed upload.
+
+    Never raises: a cleanup failure is logged but must not mask the original
+    error that triggered the rollback.
+    """
+    if not keys:
+        return
+    store = get_store()
+    for key in keys:
+        try:
+            if isinstance(store, LocalArtifactStore):
+                Path(key).unlink(missing_ok=True)
+            elif isinstance(store, S3ArtifactStore):
+                store.client.delete_object(Bucket=store.bucket, Key=key)
+        except (OSError, BotoCoreError, ClientError) as exc:
+            log_system_event(
+                "upload_artifact_cleanup_failed",
+                level=logging.WARNING,
+                request_id=request_id,
+                artifact_key=key,
+                error=str(exc),
+            )
+
+
 def _get_run_or_404(session: Session, run_id: str) -> RunEntry:
     try:
         safe_run_id = validate_run_id(run_id)
@@ -427,13 +556,23 @@ def _get_run_or_404(session: Session, run_id: str) -> RunEntry:
 
 
 async def _read_upload_bytes(upload: UploadFile) -> bytes:
-    data = await upload.read()
-    if len(data) > settings.max_upload_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"{upload.filename or 'upload'} exceeds {settings.max_upload_bytes} bytes",
-        )
-    return data
+    # Read in bounded chunks and abort as soon as the cumulative size exceeds the
+    # limit, so an over-limit body is never fully materialized in memory.
+    max_bytes = settings.max_upload_bytes
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"{upload.filename or 'upload'} exceeds {max_bytes} bytes",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _to_response(item: RunEntry) -> RunResponse:
@@ -475,12 +614,17 @@ def _database_check(session: Session) -> dict[str, object]:
 
 
 def _storage_check() -> dict[str, object]:
+    # Actually verify writability end to end (write + read-back + delete for
+    # local; put + delete for S3) rather than only ensuring directories exist.
     try:
         ensure_storage_dirs()
-        return {"ok": True, **storage_status()}
+        probe = storage_write_probe()
     except Exception as exc:
         return {
             "ok": False,
             "backend": settings.storage_backend,
             "error": str(exc),
         }
+    details: dict[str, object] = {**storage_status(), **probe}
+    details.setdefault("ok", False)
+    return details
