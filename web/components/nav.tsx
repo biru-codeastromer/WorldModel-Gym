@@ -16,8 +16,20 @@ const links = [
   { href: "/", label: "Overview" },
   { href: "/tasks", label: "Tasks" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/upload", label: "Upload" }
+  { href: "/upload", label: "Upload" },
+  { href: "/docs", label: "Docs" }
 ];
+
+/**
+ * Active-state match. Section links use exact match; routes with sub-pages
+ * (e.g. /docs/quickstart) keep their nav item active via a prefix match so the
+ * "Docs" link highlights across the whole docs tree. "/" stays exact so it
+ * never lights up on every route.
+ */
+function isLinkActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 function Logo() {
   return (
@@ -141,7 +153,7 @@ export function Nav() {
           className="hidden flex-1 items-center justify-center gap-7 lg:flex xl:gap-9"
         >
           {links.map((link) => {
-            const isActive = pathname === link.href;
+            const isActive = isLinkActive(pathname, link.href);
             return (
               <Link
                 key={link.href}
@@ -228,7 +240,7 @@ export function Nav() {
 
               <nav aria-label="Mobile" className="flex flex-col">
                 {links.map((link) => {
-                  const isActive = pathname === link.href;
+                  const isActive = isLinkActive(pathname, link.href);
                   return (
                     <Link
                       key={link.href}

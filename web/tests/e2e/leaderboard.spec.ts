@@ -15,7 +15,8 @@ const NAV = {
   overview: /^Overview$/,
   tasks: /^Tasks$/,
   leaderboard: /^Leaderboard$/,
-  upload: /^Upload$/
+  upload: /^Upload$/,
+  docs: /^Docs$/
 };
 
 function primaryNav(page: Page) {
@@ -38,6 +39,9 @@ test("primary navigation routes between the core surfaces", async ({ page }) => 
 
   await nav.getByRole("link", { name: NAV.upload }).click();
   await expect(page).toHaveURL(/\/upload/);
+
+  await nav.getByRole("link", { name: NAV.docs }).click();
+  await expect(page).toHaveURL(/\/docs/);
 
   await nav.getByRole("link", { name: NAV.overview }).click();
   await expect(page).toHaveURL(/\/$|\/$/);
@@ -162,4 +166,44 @@ test("selecting two runs and pressing Compare opens the comparison view", async 
   await expect(page).toHaveURL(/\/compare\?runs=/);
   // The comparison surface renders its run-comparison heading.
   await expect(page.getByRole("heading", { name: /comparing 2 runs/i })).toBeVisible();
+});
+
+test("pressing '?' opens the keyboard shortcuts dialog", async ({ page }) => {
+  await page.goto("/");
+
+  // The global "?" shortcut opens the shortcuts help dialog.
+  await page.keyboard.press("Shift+Slash");
+
+  const dialog = page.getByRole("dialog", { name: /keyboard shortcuts/i });
+  await expect(dialog).toBeVisible();
+
+  // It documents at least the command palette shortcut.
+  await expect(dialog.getByText(/command palette/i).first()).toBeVisible();
+
+  // Escape closes it again and restores the page.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("the docs site renders with a section sidebar", async ({ page }) => {
+  await page.goto("/docs");
+
+  // The "Docs" primary nav link stays active across the docs tree.
+  await expect(
+    primaryNav(page).getByRole("link", { name: NAV.docs })
+  ).toHaveAttribute("aria-current", "page");
+
+  // The documentation section navigation is present and links into sections.
+  const docsNav = page.getByRole("navigation", { name: /documentation sections/i });
+  await expect(docsNav).toBeVisible({ timeout: 15_000 });
+
+  const overviewLink = docsNav.getByRole("link", { name: /overview/i }).first();
+  await expect(overviewLink).toBeVisible();
+  await overviewLink.click();
+  await expect(page).toHaveURL(/\/docs\/overview/);
+
+  // The active section carries aria-current for assistive tech.
+  await expect(
+    docsNav.getByRole("link", { name: /overview/i }).first()
+  ).toHaveAttribute("aria-current", "page");
 });

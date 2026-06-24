@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Copy,
   Github,
+  Keyboard,
   LayoutDashboard,
   ListChecks,
   Moon,
@@ -17,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { useShortcutsHelp } from "@/components/shortcuts";
 import { useTheme } from "@/components/theme";
 import { cn, toast } from "@/components/ui";
 import { fetchLeaderboard, fetchTasks } from "@/lib/api";
@@ -46,6 +48,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
   const reduce = useReducedMotion();
   const { resolvedTheme, toggleTheme } = useTheme();
+  const { setOpen: setShortcutsOpen } = useShortcutsHelp();
   const labelId = useId();
   const [search, setSearch] = useState("");
 
@@ -161,6 +164,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     window.open(REPO, "_blank", "noopener,noreferrer");
   }, [close]);
 
+  const openShortcuts = useCallback(() => {
+    close();
+    setShortcutsOpen(true);
+  }, [close, setShortcutsOpen]);
+
   const onToggleTheme = useCallback(() => {
     toggleTheme();
     toast.info(
@@ -273,6 +281,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     label="Copy current page link"
                     keywords={["copy", "link", "url", "share"]}
                     onSelect={copyLink}
+                  />
+                  <PaletteItem
+                    icon={<Keyboard className="h-4 w-4" aria-hidden="true" />}
+                    label="Keyboard shortcuts"
+                    keywords={["keyboard", "shortcuts", "keys", "help", "hotkeys"]}
+                    onSelect={openShortcuts}
                   />
                   <PaletteItem
                     icon={<Github className="h-4 w-4" aria-hidden="true" />}

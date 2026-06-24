@@ -5,13 +5,14 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { AlertTriangle, ArrowLeft, Network, Upload, Waypoints } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Upload, Waypoints } from "lucide-react";
 
 import { fetchRun, fetchTrace, formatMetric, toFiniteNumber } from "@/lib/api";
 import { extractEvents, normalizeEpisodes } from "@/lib/trace";
 import type { TraceEpisode } from "@/lib/trace";
 import { Reveal, useHoverLift } from "@/components/motion";
 import { Sparkline } from "@/components/visuals";
+import { EpisodePlayer } from "@/components/trace";
 import {
   Badge,
   Button,
@@ -20,8 +21,7 @@ import {
   MetricBar,
   Segmented,
   Skeleton,
-  Stat,
-  cn
+  Stat
 } from "@/components/ui";
 
 type TabKey = "metrics" | "trace" | "config";
@@ -32,10 +32,10 @@ const TAB_OPTIONS: { value: TabKey; label: string }[] = [
   { value: "config", label: "Config" }
 ];
 
-// Hard cap on how many episodes/steps/events we attempt to render so a huge
-// trace cannot lock up the main thread. Anything beyond is summarised.
+// Hard cap on how many episodes/events we attempt to render so a huge trace
+// cannot lock up the main thread. Anything beyond is summarised. (Per-step
+// virtualization lives inside the player's StepStrip.)
 const MAX_EPISODES = 40;
-const MAX_STEPS_PER_EPISODE = 80;
 const MAX_EVENTS = 80;
 
 /** Pull a finite half-width CI from a [low, high] tuple (or array). */
@@ -547,9 +547,6 @@ function TracePanel({
     );
   }
 
-  const shownEpisodes = episodes.slice(0, MAX_EPISODES);
-  const hiddenEpisodes = episodes.length - shownEpisodes.length;
-
   return (
     <Reveal group className="space-y-4">
       {/* Summary chips */}
@@ -568,24 +565,9 @@ function TracePanel({
         </div>
       </Reveal>
 
-      {/* Episode timeline */}
+      {/* Interactive episode player (replaces the static timeline). */}
       <Reveal>
-        <Card padding="lg">
-          <div className="flex items-center gap-2">
-            <Network className="h-4 w-4 text-accent" aria-hidden="true" />
-            <h2 className="font-serif text-xl text-fg">Episode timeline</h2>
-          </div>
-          <div className="mt-5 space-y-3">
-            {shownEpisodes.map((ep, idx) => (
-              <EpisodeRow key={idx} index={idx} episode={ep} />
-            ))}
-          </div>
-          {hiddenEpisodes > 0 ? (
-            <p className="mt-4 font-mono text-xs text-fg-subtle">
-              + {hiddenEpisodes} more episodes not shown
-            </p>
-          ) : null}
-        </Card>
+        <EpisodePlayer episodes={episodes} maxEpisodes={MAX_EPISODES} />
       </Reveal>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -637,69 +619,6 @@ function TracePanel({
         </Reveal>
       </div>
     </Reveal>
-  );
-}
-
-function EpisodeRow({ index, episode }: { index: number; episode: TraceEpisode }) {
-  const steps = (episode.steps ?? []).slice(0, MAX_STEPS_PER_EPISODE);
-  const stepCount = episode.steps?.length ?? 0;
-
-  // Per-step reward sparkline (NaN-guarded). Falls back gracefully when absent.
-  const rewards = useMemo(() => {
-    return steps
-      .map((s) => toFiniteNumber((s as Record<string, unknown>).reward))
-      .filter((n): n is number => n !== null);
-  }, [steps]);
-
-  const eventCount = steps.reduce((sum, s) => sum + (s.events?.length ?? 0), 0);
-  const lift = useHoverLift(2);
-
-  return (
-    <motion.div {...lift}>
-      <div className="flex items-center gap-4 rounded-md border border-border bg-surface-2 px-4 py-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft font-mono text-xs font-semibold text-accent">
-          {index + 1}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-xs text-fg">
-            {stepCount} {stepCount === 1 ? "step" : "steps"}
-            {eventCount > 0 ? (
-              <span className="text-fg-subtle"> · {eventCount} events</span>
-            ) : null}
-          </p>
-          <div className="mt-1.5 flex items-center gap-2">
-            <StepTrack count={Math.min(stepCount, 48)} />
-          </div>
-        </div>
-        {rewards.length >= 2 ? (
-          <Sparkline
-            data={rewards}
-            tone={rewards[rewards.length - 1] >= rewards[0] ? "success" : "danger"}
-            width={88}
-            height={26}
-            className="shrink-0"
-          />
-        ) : null}
-      </div>
-    </motion.div>
-  );
-}
-
-/** A compact tick row representing steps in an episode (decorative). */
-function StepTrack({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <div className="flex flex-1 gap-0.5" aria-hidden="true">
-      {Array.from({ length: count }, (_, i) => (
-        <span
-          key={i}
-          className={cn(
-            "h-1.5 flex-1 rounded-full",
-            i === count - 1 ? "bg-accent" : "bg-surface-3"
-          )}
-        />
-      ))}
-    </div>
   );
 }
 
