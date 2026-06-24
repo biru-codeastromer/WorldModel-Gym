@@ -25,7 +25,7 @@ demo:
 	else \
 		echo "Docker daemon unavailable; starting local API fallback on :8000"; \
 		mkdir -p .tmp; \
-		$(PYTHON) -m uvicorn worldmodel_server.main:app --host 127.0.0.1 --port 8000 > .tmp/demo-server.log 2>&1 & \
+		WMG_LEGACY_UPLOAD_TOKEN_ENABLED=true $(PYTHON) -m uvicorn worldmodel_server.main:app --host 127.0.0.1 --port 8000 > .tmp/demo-server.log 2>&1 & \
 		echo $$! > .tmp/demo-server.pid; \
 		sleep 2; \
 	fi

@@ -14,10 +14,26 @@ services:
       # (contains credentials — not stored in git)
       - key: WMG_AUTO_MIGRATE
         value: "true"
-      - key: WMG_STORAGE_DIR
-        value: /tmp/storage
+      # Durable, S3-compatible storage is REQUIRED in production. The container
+      # filesystem is ephemeral, so local storage would silently lose every
+      # uploaded artifact on each restart/redeploy. The S3 credentials below are
+      # dashboard-managed secrets (sync:false) — set them before the first deploy
+      # or the API will intentionally refuse to start.
+      - key: WMG_STORAGE_BACKEND
+        value: s3
+      - key: WMG_S3_BUCKET
+        sync: false
+      - key: WMG_S3_REGION
+        sync: false
+      - key: WMG_S3_ENDPOINT_URL
+        sync: false
+      - key: WMG_S3_ACCESS_KEY_ID
+        sync: false
+      - key: WMG_S3_SECRET_ACCESS_KEY
+        sync: false
+      # Do not seed synthetic benchmark data into the production leaderboard.
       - key: WMG_SEED_DEMO_DATA
-        value: "true"
+        value: "false"
       - key: WMG_ENABLE_METRICS
         value: "true"
       - key: WMG_LOG_JSON
@@ -28,6 +44,10 @@ services:
         value: https://world-model-gym.vercel.app
       - key: WMG_LEGACY_UPLOAD_TOKEN_ENABLED
         value: "false"
+      # Render terminates TLS at its load balancer and sets X-Forwarded-For;
+      # trust it so per-client rate limiting keys on the real client IP.
+      - key: WMG_TRUST_PROXY_HEADERS
+        value: "true"
       # Optional one-time bootstrap for the first admin/writer key.
       # Remove after a durable production API key is in place.
       - key: WMG_BOOTSTRAP_API_KEY

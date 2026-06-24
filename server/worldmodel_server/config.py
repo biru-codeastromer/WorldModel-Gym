@@ -34,8 +34,9 @@ class Settings:
         self.upload_token = os.getenv("WMG_UPLOAD_TOKEN", "dev-token")
         self.legacy_upload_token_enabled = _as_bool(
             os.getenv("WMG_LEGACY_UPLOAD_TOKEN_ENABLED"),
-            True,
+            False,
         )
+        self.trust_proxy_headers = _as_bool(os.getenv("WMG_TRUST_PROXY_HEADERS"), False)
         self.storage_dir = Path(os.getenv("WMG_STORAGE_DIR", "server/storage"))
         self.storage_backend = os.getenv("WMG_STORAGE_BACKEND", "local").lower()
         self.s3_bucket = os.getenv("WMG_S3_BUCKET", "")
@@ -75,12 +76,21 @@ class Settings:
             raise RuntimeError("WMG_STORAGE_BACKEND must be 'local' or 's3'")
         if self.storage_backend == "s3" and not self.s3_bucket:
             raise RuntimeError("WMG_S3_BUCKET must be set when WMG_STORAGE_BACKEND=s3")
+        if self.is_production and self.storage_backend == "local":
+            raise RuntimeError(
+                "Durable storage is required in production: set WMG_STORAGE_BACKEND=s3. "
+                "Local filesystem storage is ephemeral on most hosts and loses uploaded "
+                "artifacts on every restart or redeploy."
+            )
         if (
-            self.is_production
-            and self.legacy_upload_token_enabled
+            self.legacy_upload_token_enabled
             and self.upload_token == "dev-token"
+            and self.environment not in {"development", "test"}
         ):
-            raise RuntimeError("WMG_UPLOAD_TOKEN must be set to a non-default value in production")
+            raise RuntimeError(
+                "WMG_UPLOAD_TOKEN must be set to a non-default value when the legacy "
+                "upload token is enabled outside development/test environments."
+            )
         if self.bootstrap_api_key and len(self.bootstrap_api_key) < 24:
             raise RuntimeError("WMG_BOOTSTRAP_API_KEY must be at least 24 characters long")
 

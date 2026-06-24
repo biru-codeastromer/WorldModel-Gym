@@ -106,6 +106,43 @@ def test_api_key_can_create_and_upload_run(tmp_path, monkeypatch):
     assert any(row["run_id"] == run_id for row in leaderboard.json())
 
 
+def test_leaderboard_is_ranked_by_success_rate(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+    create_api_key = modules["worldmodel_server.auth"].create_api_key
+    session_local = modules["worldmodel_server.db"].SessionLocal
+
+    def upload(client, secret, run_id, success_rate, mean_return):
+        client.post(
+            "/api/runs",
+            json={"id": run_id, "env": "memory_maze", "agent": run_id, "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        client.post(
+            f"/api/runs/{run_id}/upload",
+            headers={"x-api-key": secret},
+            files={
+                "metrics_file": (
+                    "metrics.json",
+                    json.dumps({"success_rate": success_rate, "mean_return": mean_return}),
+                    "application/json",
+                )
+            },
+        )
+
+    with TestClient(app) as client:
+        with session_local() as session:
+            _, secret = create_api_key(session, name="ranker", scopes=["runs:write"])
+
+        # Upload the lower-scoring run first so recency ordering would put it on top.
+        upload(client, secret, "low_run", 0.20, 0.18)
+        upload(client, secret, "high_run", 0.90, 0.85)
+
+        rows = client.get("/api/leaderboard?track=test").json()
+
+    assert [row["run_id"] for row in rows] == ["high_run", "low_run"]
+
+
 def test_public_rate_limit_returns_429(tmp_path, monkeypatch):
     modules = load_test_modules(monkeypatch, tmp_path, public_limit=1)
     app = modules["worldmodel_server.main"].app
@@ -116,6 +153,38 @@ def test_public_rate_limit_returns_429(tmp_path, monkeypatch):
 
     assert first.status_code == 200
     assert second.status_code == 429
+
+
+def test_legacy_upload_token_rejected_when_disabled(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/runs",
+            json={"id": "legacy_run", "env": "memory_maze", "agent": "random", "track": "test"},
+            headers={"x-upload-token": "test-token"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_trigger_endpoint_reports_not_implemented(tmp_path, monkeypatch):
+    modules = load_test_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+    create_api_key = modules["worldmodel_server.auth"].create_api_key
+    session_local = modules["worldmodel_server.db"].SessionLocal
+
+    with TestClient(app) as client:
+        with session_local() as session:
+            _, secret = create_api_key(session, name="admin", scopes=["admin"])
+
+        response = client.post(
+            "/api/runs/some_run/trigger",
+            headers={"x-api-key": secret},
+        )
+
+    assert response.status_code == 501
 
 
 def test_readyz_reports_component_checks(tmp_path, monkeypatch):
@@ -130,7 +199,8 @@ def test_readyz_reports_component_checks(tmp_path, monkeypatch):
     assert payload["ok"] is True
     assert payload["checks"]["database"]["ok"] is True
     assert payload["checks"]["storage"]["ok"] is True
-    assert payload["checks"]["auth"]["legacy_upload_token_enabled"] is True
+    # Legacy upload token is opt-in and off by default.
+    assert payload["checks"]["auth"]["legacy_upload_token_enabled"] is False
 
 
 def test_bootstrap_api_key_is_created_once(tmp_path, monkeypatch):

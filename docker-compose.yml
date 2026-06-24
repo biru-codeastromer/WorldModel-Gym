@@ -18,6 +18,7 @@ services:
     container_name: wmg-server
     environment:
       - WMG_UPLOAD_TOKEN=dev-token
+      - WMG_LEGACY_UPLOAD_TOKEN_ENABLED=true
       - WMG_DB_URL=postgresql+psycopg://postgres:postgres@postgres:5432/worldmodel_gym
       - WMG_AUTO_MIGRATE=true
       - WMG_STORAGE_DIR=/app/server/storage

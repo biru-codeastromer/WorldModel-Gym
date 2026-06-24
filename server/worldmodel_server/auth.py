@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 from dataclasses import dataclass
@@ -145,7 +146,7 @@ def get_authenticated_principal(
     if (
         settings.legacy_upload_token_enabled
         and x_upload_token
-        and x_upload_token == settings.upload_token
+        and hmac.compare_digest(x_upload_token, settings.upload_token)
     ):
         return AuthenticatedPrincipal(
             kind="legacy_token",

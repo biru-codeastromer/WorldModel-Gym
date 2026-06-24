@@ -56,7 +56,14 @@ async def lifespan(_app: FastAPI):
         seeded_runs = 0
         with SessionLocal() as session:
             bootstrap_result = ensure_bootstrap_api_key(session)
-            if settings.seed_demo_data:
+            if settings.seed_demo_data and settings.is_production:
+                log_system_event(
+                    "demo_seed_skipped_in_production",
+                    level=logging.WARNING,
+                    reason="WMG_SEED_DEMO_DATA is ignored in production to keep the "
+                    "leaderboard free of synthetic data.",
+                )
+            elif settings.seed_demo_data:
                 seeded_runs = seed_demo_runs(session)
         log_system_event(
             "startup_complete",
@@ -80,7 +87,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins or ["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,9 +102,16 @@ if settings.enable_metrics and Instrumentator is not None:
 
 
 def _client_host(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # X-Forwarded-For is client-spoofable unless we are actually behind a trusted
+    # reverse proxy. Only honor it when explicitly configured (WMG_TRUST_PROXY_HEADERS),
+    # and then take the right-most hop — the address observed by the trusted proxy,
+    # which the client cannot forge (it can only prepend left-most entries).
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+            if hops:
+                return hops[-1]
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
@@ -113,10 +127,11 @@ def _should_rate_limit_public_request(request: Request) -> bool:
     return True
 
 
-def _enforce_principal_rate_limit(request: Request, principal: AuthenticatedPrincipal) -> None:
-    client_host = _client_host(request)
+def _enforce_principal_rate_limit(principal: AuthenticatedPrincipal) -> None:
+    # Key authenticated writes on the principal identity alone. Including the client
+    # IP would let a single credential multiply its quota by rotating source/XFF IPs.
     result = rate_limiter.hit(
-        f"write:{principal.identifier}:{client_host}",
+        f"write:{principal.identifier}",
         principal.rate_limit_per_minute,
     )
     if not result.allowed:
@@ -128,18 +143,16 @@ def _enforce_principal_rate_limit(request: Request, principal: AuthenticatedPrin
 
 
 def _require_write_access(
-    request: Request,
     principal: AuthenticatedPrincipal = Depends(require_scope("runs:write")),
 ) -> AuthenticatedPrincipal:
-    _enforce_principal_rate_limit(request, principal)
+    _enforce_principal_rate_limit(principal)
     return principal
 
 
 def _require_admin_access(
-    request: Request,
     principal: AuthenticatedPrincipal = Depends(require_scope("admin")),
 ) -> AuthenticatedPrincipal:
-    _enforce_principal_rate_limit(request, principal)
+    _enforce_principal_rate_limit(principal)
     return principal
 
 
@@ -294,6 +307,9 @@ def leaderboard(
             )
         )
 
+    # A leaderboard ranks by performance, not upload recency: best success_rate
+    # first, breaking ties on mean_return then most-recent submission.
+    out.sort(key=lambda row: (row.success_rate, row.mean_return, row.created_at), reverse=True)
     return out
 
 
@@ -371,11 +387,16 @@ def trigger_demo_run(
     run_id: str,
     _principal: AuthenticatedPrincipal = Depends(_require_admin_access),
 ):
-    return {
-        "status": "accepted",
-        "run_id": run_id,
-        "note": "Use scripts/demo_run.py for local runner.",
-    }
+    # Server-side run orchestration does not exist yet. Returning "accepted" here
+    # would falsely imply the platform executed the run, so fail honestly with 501
+    # until a real runner/queue is wired up.
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Server-side run execution is not implemented. Run evaluations locally "
+            "with scripts/demo_run.py and upload the resulting artifacts."
+        ),
+    )
 
 
 def _parse_metrics(raw: str) -> dict:
