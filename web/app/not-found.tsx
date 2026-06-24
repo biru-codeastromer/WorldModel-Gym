@@ -1,29 +1,50 @@
 import Link from "next/link";
+import { Compass, Home, Trophy } from "lucide-react";
+
+import { Button, Card, SectionHeader } from "@/components/ui";
+import { GridWorld } from "@/components/visuals";
 
 export default function NotFound() {
   return (
-    <section className="space-y-10 pb-8">
-      <section className="border-b border-[rgba(185,174,195,0.46)] pb-12 pt-8">
-        <p className="section-kicker">Page not found</p>
-        <h1 className="mt-8 font-[var(--font-serif)] text-6xl font-medium leading-[0.92] tracking-[-0.04em] text-[var(--ink)] md:text-7xl">
-          404 — this surface does not exist.
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-8 text-[var(--muted)]">
-          The link may be stale, or the run you were looking for was never published. Pick a live surface below to get
-          back on track.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/" className="button-primary px-6 py-4 text-sm font-semibold">
-            Back to Home
-          </Link>
-          <Link href="/leaderboard" className="button-secondary px-6 py-4 text-sm font-semibold">
-            Open Leaderboard
-          </Link>
-          <Link href="/tasks" className="button-secondary px-6 py-4 text-sm font-semibold">
-            Browse Tasks
-          </Link>
+    <section className="py-12 md:py-16">
+      <Card elevation="raised" padding="lg" className="overflow-hidden">
+        <div className="grid items-center gap-8 md:grid-cols-[1.4fr_1fr]">
+          <div>
+            <SectionHeader
+              as="h1"
+              kicker="404 — page not found"
+              title="This surface does not exist."
+              lede="The link may be stale, or the run you were looking for was never published. Pick a live surface below to get back on track."
+            />
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link href="/">
+                <Button leftIcon={<Home className="h-4 w-4" aria-hidden="true" />}>
+                  Back to home
+                </Button>
+              </Link>
+              <Link href="/leaderboard">
+                <Button
+                  variant="secondary"
+                  leftIcon={<Trophy className="h-4 w-4" aria-hidden="true" />}
+                >
+                  Open leaderboard
+                </Button>
+              </Link>
+              <Link href="/tasks">
+                <Button
+                  variant="ghost"
+                  leftIcon={<Compass className="h-4 w-4" aria-hidden="true" />}
+                >
+                  Browse tasks
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="hidden justify-end md:flex" aria-hidden="true">
+            <GridWorld className="h-40 w-40 text-fg-subtle" />
+          </div>
         </div>
-      </section>
+      </Card>
     </section>
   );
 }

@@ -5,6 +5,7 @@ import localFont from "next/font/local";
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
+import { ThemeScript } from "@/components/theme";
 import "./globals.css";
 
 const cmuSerif = localFont({
@@ -67,8 +68,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // its inline bootstrap scripts so they pass the nonce-based CSP.
   const nonce = headers().get("x-nonce") ?? undefined;
   return (
-    <html lang="en" className={`${cmuSerif.variable} ${plexMono.variable}`} nonce={nonce}>
-      <body className="text-[var(--ink)]">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${cmuSerif.variable} ${plexMono.variable}`}
+      nonce={nonce}
+    >
+      <head>
+        <ThemeScript nonce={nonce} />
+      </head>
+      <body className="bg-bg text-fg antialiased">
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>

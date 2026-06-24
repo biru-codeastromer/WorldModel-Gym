@@ -1,7 +1,15 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Github, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
+import { ThemeToggle } from "@/components/theme";
+import { Button } from "@/components/ui";
+
+const REPO = "https://github.com/biru-codeastromer/WorldModel-Gym";
 
 const links = [
   { href: "/", label: "Overview" },
@@ -10,27 +18,83 @@ const links = [
   { href: "/upload", label: "Upload" }
 ];
 
+function Logo() {
+  return (
+    <Link href="/" className="flex shrink-0 items-center gap-3">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-fg text-[1.15rem] font-semibold text-bg">
+        W
+      </span>
+      <span className="leading-none">
+        <span className="block font-mono text-[0.9rem] font-medium tracking-[-0.02em] text-fg">
+          WorldModel Gym
+        </span>
+        <span className="mt-1 block font-mono text-[0.58rem] uppercase tracking-[0.26em] text-fg-subtle">
+          Research Benchmark
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export function Nav() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Close the drawer on route change.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // Body scroll lock + ESC + focus trap while the drawer is open.
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeBtnRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-40 bg-[rgba(254,247,255,0.96)] font-[var(--font-mono)]">
-      <div className="mx-auto flex min-h-[78px] max-w-[1320px] items-center justify-between gap-8 px-6 py-4 md:px-10 xl:px-12">
-        <Link href="/" className="flex shrink-0 items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-[var(--ink)] text-[1.35rem] font-semibold text-white">
-            W
-          </div>
-          <div className="leading-none">
-            <p className="text-[0.95rem] font-medium tracking-[-0.03em] text-[var(--ink)]">
-              WorldModel Gym
-            </p>
-            <p className="mt-1 text-[0.62rem] uppercase tracking-[0.28em] text-[var(--muted)]">
-              Research Benchmark Platform
-            </p>
-          </div>
-        </Link>
+    <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-bg/80 backdrop-blur-md">
+      <div className="mx-auto flex h-[68px] max-w-[1320px] items-center justify-between gap-6 px-5 md:h-[76px] md:px-8 xl:px-10">
+        <Logo />
 
-        <nav className="hidden flex-1 items-center justify-center gap-7 text-sm text-[var(--ink)] lg:flex xl:gap-10">
+        <nav
+          aria-label="Primary"
+          className="hidden flex-1 items-center justify-center gap-7 lg:flex xl:gap-9"
+        >
           {links.map((link) => {
             const isActive = pathname === link.href;
             return (
@@ -46,32 +110,114 @@ export function Nav() {
           })}
         </nav>
 
-        <div className="flex items-center justify-end gap-4">
+        <div className="flex items-center gap-2 md:gap-3">
           <a
-            href="https://github.com/biru-codeastromer/WorldModel-Gym"
+            href={REPO}
             target="_blank"
             rel="noreferrer"
-            className="nav-link hidden lg:inline-flex"
+            aria-label="GitHub repository"
+            className="hidden h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-fg-muted transition-colors hover:border-border-strong hover:text-fg lg:inline-flex"
           >
-            GitHub
+            <Github className="h-4 w-4" aria-hidden="true" />
           </a>
-          <Link
-            href="/upload"
-            className="button-primary px-5 py-2.5 text-sm font-medium"
-          >
-            Get Started
+          <ThemeToggle />
+          <Link href="/upload" className="hidden sm:inline-flex">
+            <Button size="sm">Get Started</Button>
           </Link>
-          <a
-            href="https://github.com/biru-codeastromer/WorldModel-Gym"
-            target="_blank"
-            rel="noreferrer"
-            className="nav-link inline-flex lg:hidden"
+
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={open}
+            aria-controls="mobile-menu"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-fg-muted transition-colors hover:text-fg lg:hidden"
           >
-            GitHub
-          </a>
+            <Menu className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-full h-6 bg-gradient-to-b from-[rgba(254,247,255,0.92)] to-transparent" />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="fixed inset-0 z-50 lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.2 }}
+          >
+            <button
+              type="button"
+              aria-label="Close menu"
+              tabIndex={-1}
+              onClick={() => setOpen(false)}
+              className="absolute inset-0 h-full w-full cursor-default bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              ref={panelRef}
+              id="mobile-menu"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Site menu"
+              initial={{ x: reduce ? 0 : "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: reduce ? 0 : "100%" }}
+              transition={{ duration: reduce ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute right-0 top-0 flex h-full w-[82%] max-w-xs flex-col gap-1 border-l border-border bg-surface p-5 shadow-pop"
+            >
+              <div className="flex items-center justify-between pb-4">
+                <Logo />
+                <button
+                  ref={closeBtnRef}
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close menu"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border text-fg-muted transition-colors hover:text-fg"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <nav aria-label="Mobile" className="flex flex-col">
+                {links.map((link) => {
+                  const isActive = pathname === link.href;
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`rounded-md px-3 py-3 font-mono text-base transition-colors ${
+                        isActive
+                          ? "bg-accent-soft text-accent"
+                          : "text-fg-muted hover:bg-surface-2 hover:text-fg"
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
+                <a
+                  href={REPO}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-md px-3 py-3 font-mono text-base text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+                >
+                  <Github className="h-4 w-4" aria-hidden="true" />
+                  GitHub
+                </a>
+              </nav>
+
+              <div className="mt-auto pt-5">
+                <Link href="/upload" className="block">
+                  <Button className="w-full">Get Started</Button>
+                </Link>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }
