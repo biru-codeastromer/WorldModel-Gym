@@ -86,6 +86,13 @@ class Settings:
         # tasks). 0 disables caching entirely.
         self.response_cache_ttl_seconds = int(os.getenv("WMG_RESPONSE_CACHE_TTL_SECONDS", "10"))
 
+        # --- OpenTelemetry distributed tracing (OPTIONAL) ---
+        # Tracing is enabled only when the OTLP endpoint is set; otherwise the
+        # whole tracing path is a no-op (no provider, no exporter, zero
+        # overhead). The endpoint is the http/protobuf OTLP collector URL.
+        self.otel_exporter_otlp_endpoint = os.getenv("WMG_OTEL_EXPORTER_OTLP_ENDPOINT", "")
+        self.otel_service_name = os.getenv("WMG_OTEL_SERVICE_NAME", "worldmodel-gym-api")
+
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
@@ -94,6 +101,11 @@ class Settings:
     def queue_active(self) -> bool:
         """True only when the async job queue is both enabled and has Redis."""
         return bool(self.queue_enabled and self.redis_url)
+
+    @property
+    def tracing_enabled(self) -> bool:
+        """True only when an OTLP endpoint is configured (tracing opt-in)."""
+        return bool(self.otel_exporter_otlp_endpoint)
 
     def validate(self) -> None:
         if self.storage_backend not in {"local", "s3"}:

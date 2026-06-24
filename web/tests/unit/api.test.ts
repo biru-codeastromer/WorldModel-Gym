@@ -3,12 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createRun,
   fetchLeaderboard,
-  fetchRun,
   fetchTasks,
   fetchTrace,
   parseTraceNdjson,
   uploadRunArtifacts
 } from "@/lib/api";
+
+/** Shape of a parsed NDJSON trace entry as exercised by these tests. */
+type TraceEntry = { steps: Array<{ t: number }> };
 
 /** A schema-valid RunResponse, optionally overridden per-test. */
 function runResponse(overrides: Record<string, unknown> = {}) {
@@ -185,7 +187,7 @@ describe("fetchTrace", () => {
     const ndjson = ['{"steps":[]}', "", '{"steps":[{"t":0}]}', "   "].join("\n");
     fetchMock.mockResolvedValueOnce(textResponse(ndjson));
 
-    const trace = (await fetchTrace("run-1")) as any[];
+    const trace = (await fetchTrace("run-1")) as TraceEntry[];
 
     expect(trace).toHaveLength(2);
     expect(trace[1].steps[0].t).toBe(0);
@@ -195,11 +197,11 @@ describe("fetchTrace", () => {
     const ndjson = ['{"steps":[{"t":0}]}', '{"steps":[{"t":1}', '{"steps":[{"t":2}]}'].join("\n");
     fetchMock.mockResolvedValueOnce(textResponse(ndjson));
 
-    const trace = (await fetchTrace("run-1")) as any[];
+    const trace = (await fetchTrace("run-1")) as TraceEntry[];
 
     // The truncated middle line is dropped; the two valid lines survive.
     expect(trace).toHaveLength(2);
-    expect(trace.map((e: any) => e.steps[0].t)).toEqual([0, 2]);
+    expect(trace.map((e) => e.steps[0].t)).toEqual([0, 2]);
   });
 });
 

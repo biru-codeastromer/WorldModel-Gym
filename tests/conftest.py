@@ -22,6 +22,7 @@ _SERVER_MODULE_ORDER = [
     "worldmodel_server.request_logging",
     "worldmodel_server.seed",
     "worldmodel_server.migrations",
+    "worldmodel_server.otel",
     "worldmodel_server.main",
 ]
 

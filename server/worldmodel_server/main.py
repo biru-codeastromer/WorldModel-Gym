@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import logging
@@ -7,6 +9,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import (
@@ -24,7 +27,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -43,6 +46,7 @@ from worldmodel_server.idempotency import (
 )
 from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
+from worldmodel_server.otel import setup_tracing
 from worldmodel_server.rate_limit import WINDOW_SECONDS, RateLimitResult, rate_limiter
 from worldmodel_server.request_logging import configure_logging, log_request_event, log_system_event
 from worldmodel_server.runner import enqueue_run
@@ -71,6 +75,70 @@ LEADERBOARD_DEFAULT_LIMIT = 100
 
 # Chunk size for the streaming, size-bounded upload reader.
 UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
+
+
+class CursorError(ValueError):
+    """Raised when a client-supplied leaderboard cursor cannot be decoded.
+
+    The opaque token is base64url(JSON([success_rate, mean_return, created_at,
+    id])). Any structural problem -- bad base64, bad JSON, wrong shape, wrong
+    types -- surfaces as this single error so the endpoint can return one
+    consistent 400 problem+json regardless of how the token was corrupted.
+    """
+
+
+def _encode_leaderboard_cursor(row: LeaderboardRow) -> str:
+    """Encode a row's keyset position as an opaque, URL-safe cursor token.
+
+    The token captures exactly the ORDER BY tuple -- (success_rate, mean_return,
+    created_at, run_id) -- so the next page can be fetched with a keyset WHERE
+    clause that is stable even as rows are inserted concurrently. Padding is
+    stripped so the token is clean to drop into a query string.
+    """
+    payload = [
+        row.success_rate,
+        row.mean_return,
+        row.created_at.isoformat(),
+        row.run_id,
+    ]
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_leaderboard_cursor(token: str) -> tuple[float, float, datetime, str]:
+    """Decode an opaque cursor back into its keyset tuple.
+
+    Raises :class:`CursorError` on any malformed input so the caller can map it
+    to a single 400 problem+json. Re-adds the base64 padding that
+    :func:`_encode_leaderboard_cursor` stripped before decoding.
+    """
+    if not token:
+        raise CursorError("empty cursor")
+    padding = "=" * (-len(token) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(token + padding)
+        payload = json.loads(raw.decode("utf-8"))
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
+        raise CursorError("cursor is not valid base64url-encoded JSON") from exc
+
+    if not isinstance(payload, list) or len(payload) != 4:
+        raise CursorError("cursor has an unexpected shape")
+    success_rate, mean_return, created_at_raw, run_id = payload
+    if (
+        not isinstance(success_rate, (int, float))
+        or isinstance(success_rate, bool)
+        or not isinstance(mean_return, (int, float))
+        or isinstance(mean_return, bool)
+        or not isinstance(created_at_raw, str)
+        or not isinstance(run_id, str)
+    ):
+        raise CursorError("cursor fields have unexpected types")
+    try:
+        created_at = datetime.fromisoformat(created_at_raw)
+    except ValueError as exc:
+        raise CursorError("cursor created_at is not a valid timestamp") from exc
+    return float(success_rate), float(mean_return), created_at, run_id
+
 
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
@@ -137,6 +205,9 @@ def _cache_control_header(ttl_seconds: int) -> str:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     configure_logging()
+    # Optional, env-gated distributed tracing. A no-op unless an OTLP endpoint is
+    # configured; never breaks startup if the optional deps are missing.
+    setup_tracing(_app, engine)
     startup_context = {
         "environment": settings.environment,
         "database": describe_database(),
@@ -619,6 +690,32 @@ async def upload_run_artifacts(
     return _to_response(item)
 
 
+def _leaderboard_keyset_clause(cursor: tuple[float, float, datetime, str]):
+    """Keyset WHERE clause selecting rows strictly *after* ``cursor``.
+
+    Mirrors the ORDER BY (success_rate DESC, mean_return DESC, created_at DESC,
+    id DESC) as a lexicographic "less than" over the tuple, expanded into an
+    OR-of-AND form so every database (sqlite + postgres) can use it and the
+    leading columns still line up with ``ix_runs_leaderboard``.
+    """
+    s, m, c, i = cursor
+    return or_(
+        RunEntry.success_rate < s,
+        and_(RunEntry.success_rate == s, RunEntry.mean_return < m),
+        and_(
+            RunEntry.success_rate == s,
+            RunEntry.mean_return == m,
+            RunEntry.created_at < c,
+        ),
+        and_(
+            RunEntry.success_rate == s,
+            RunEntry.mean_return == m,
+            RunEntry.created_at == c,
+            RunEntry.id < i,
+        ),
+    )
+
+
 @api.get("/leaderboard", response_model=list[LeaderboardRow])
 def leaderboard(
     request: Request,
@@ -629,14 +726,32 @@ def leaderboard(
     include_demo: bool = Query(default=False),
     limit: int = Query(default=LEADERBOARD_DEFAULT_LIMIT, ge=1, le=LEADERBOARD_MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None),
     session: Session = Depends(get_session),
 ):
+    # Decode any client cursor up front so a malformed token fails fast with a
+    # 400 problem+json (before touching the cache or database).
+    keyset: tuple[float, float, datetime, str] | None = None
+    if cursor is not None:
+        try:
+            keyset = _decode_leaderboard_cursor(cursor)
+        except CursorError as exc:
+            return problem_response(
+                400,
+                f"invalid cursor: {exc}",
+                title="Bad Request",
+                instance=request.url.path,
+            )
+
     ttl = settings.response_cache_ttl_seconds
     response.headers["Cache-Control"] = _cache_control_header(ttl)
-    cache_key = f"leaderboard:{track}:{env}:{agent}:{include_demo}:{limit}:{offset}"
+    cache_key = f"leaderboard:{track}:{env}:{agent}:{include_demo}:{limit}:{offset}:{cursor}"
     cached = _response_cache.get(cache_key, ttl)
     if cached is not None:
-        return _leaderboard_payload(request, response, cached)
+        out, next_cursor = cached
+        if next_cursor:
+            response.headers["X-Next-Cursor"] = next_cursor
+        return _leaderboard_payload(request, response, out)
 
     q = select(RunEntry).where(RunEntry.status == "uploaded", RunEntry.track == track)
     if env:
@@ -648,19 +763,34 @@ def leaderboard(
 
     # Rank entirely in SQL using the denormalized columns (backed by
     # ix_runs_leaderboard): best success_rate first, ties broken on mean_return
-    # then most-recent submission. LIMIT/OFFSET paginate at the database so we
-    # never materialize the full table.
-    q = (
-        q.order_by(
-            desc(RunEntry.success_rate),
-            desc(RunEntry.mean_return),
-            desc(RunEntry.created_at),
-        )
-        .limit(limit)
-        .offset(offset)
+    # then most-recent submission, with run id as a final deterministic tiebreak.
+    q = q.order_by(
+        desc(RunEntry.success_rate),
+        desc(RunEntry.mean_return),
+        desc(RunEntry.created_at),
+        desc(RunEntry.id),
     )
 
+    # Keyset (cursor) pagination is a scalable alternative to OFFSET: the WHERE
+    # clause seeks straight to the next page using the same index, so paging is
+    # stable even as rows are inserted/removed. When no cursor is supplied we
+    # keep the original OFFSET path so existing callers are unaffected. Fetch one
+    # extra row to detect (and emit a cursor for) the next page without a count.
+    #
+    # A cursor is advertised for keyset walks: an explicit cursor request, or a
+    # cursorless first page (offset==0) which is the natural place to *start* a
+    # keyset walk. Pure OFFSET paging (offset>0) stays exactly as before and gets
+    # no cursor header, so existing offset clients see unchanged behavior.
+    advertise_cursor = keyset is not None or offset == 0
+    if keyset is not None:
+        q = q.where(_leaderboard_keyset_clause(keyset))
+    else:
+        q = q.offset(offset)
+    q = q.limit(limit + 1)
+
     rows = session.scalars(q).all()
+    has_next = len(rows) > limit
+    rows = rows[:limit]
     out: list[LeaderboardRow] = []
     for row in rows:
         metrics = _parse_metrics(row.metrics_json)
@@ -678,7 +808,17 @@ def leaderboard(
                 created_at=row.created_at,
             )
         )
-    _response_cache.set(cache_key, out, ttl)
+
+    # The next cursor points at the last row of this page; absent (empty) on the
+    # final page so clients know to stop. We only advertise it as a response
+    # header -- the body stays a plain JSON list so web/mobile are unaffected.
+    next_cursor = (
+        _encode_leaderboard_cursor(out[-1]) if (advertise_cursor and has_next and out) else ""
+    )
+    if next_cursor:
+        response.headers["X-Next-Cursor"] = next_cursor
+
+    _response_cache.set(cache_key, (out, next_cursor), ttl)
     return _leaderboard_payload(request, response, out)
 
 
@@ -715,6 +855,11 @@ def _leaderboard_payload(request: Request, response: Response, rows: list[Leader
         not_modified.headers["Cache-Control"] = response.headers.get(
             "Cache-Control", _cache_control_header(settings.response_cache_ttl_seconds)
         )
+        # Carry the keyset cursor onto the 304 too, so a conditional poller can
+        # still advance to the next page without re-fetching the body.
+        next_cursor = response.headers.get("X-Next-Cursor")
+        if next_cursor:
+            not_modified.headers["X-Next-Cursor"] = next_cursor
         return not_modified
     return rows
 

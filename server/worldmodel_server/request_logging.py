@@ -20,8 +20,33 @@ def configure_logging() -> None:
     configure_logging._configured = True  # type: ignore[attr-defined]
 
 
+def _current_trace_context() -> dict[str, str]:
+    """Return the active OpenTelemetry trace/span ids, if any.
+
+    No-op (empty dict) when tracing is disabled or opentelemetry is not
+    installed, so log correlation never adds overhead or a hard dependency.
+    """
+    if not settings.tracing_enabled:
+        return {}
+    try:
+        from opentelemetry import trace
+    except ImportError:  # pragma: no cover - optional dependency missing
+        return {}
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    if not ctx.is_valid:
+        return {}
+    return {
+        "trace_id": format(ctx.trace_id, "032x"),
+        "span_id": format(ctx.span_id, "016x"),
+    }
+
+
 def log_request_event(payload: dict[str, object]) -> None:
     logger = logging.getLogger("worldmodel_server.access")
+    trace_context = _current_trace_context()
+    if trace_context:
+        payload = {**payload, **trace_context}
     if settings.log_json:
         logger.info(json.dumps(payload, default=str))
         return
