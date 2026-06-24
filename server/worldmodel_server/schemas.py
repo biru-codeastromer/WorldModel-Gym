@@ -10,6 +10,11 @@ class RunCreate(BaseModel):
     env: str
     agent: str
     track: str = "test"
+    # Optional per-run evaluation budget. ``None`` falls back to the server's
+    # default budget at execution time. Bounds keep a single queued job from
+    # asking for an unbounded amount of compute.
+    max_episodes: int | None = Field(default=None, ge=1, le=1000)
+    max_steps: int | None = Field(default=None, ge=1, le=100_000)
 
 
 class RunResponse(BaseModel):
@@ -18,6 +23,8 @@ class RunResponse(BaseModel):
     agent: str
     track: str
     status: str
+    max_episodes: int | None = None
+    max_steps: int | None = None
     created_by: str | None = None
     storage_backend: str | None = None
     created_at: datetime

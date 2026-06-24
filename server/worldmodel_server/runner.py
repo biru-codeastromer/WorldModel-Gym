@@ -33,9 +33,12 @@ STATUS_FAILED = "failed"
 # re-enqueued (idempotency guard).
 ACTIVE_STATUSES = frozenset({STATUS_QUEUED, STATUS_RUNNING})
 
-# Default evaluation budget for a server-orchestrated run. Kept small so a
-# queued job finishes quickly; callers can override via ``max_episodes``.
-DEFAULT_MAX_EPISODES = 2
+# Default evaluation budget for a server-orchestrated run, applied only when the
+# run row carries no explicit per-run budget. Sized for Phase-1 statistical
+# rigor (enough episodes for a meaningful success-rate estimate) rather than a
+# bare smoke test; callers can override via the run's ``max_episodes`` /
+# ``max_steps`` columns or the matching ``enqueue_run`` arguments.
+DEFAULT_MAX_EPISODES = 20
 DEFAULT_MAX_STEPS = 120
 
 
@@ -120,7 +123,8 @@ def enqueue_run(
     env: str,
     track: str,
     *,
-    max_episodes: int = DEFAULT_MAX_EPISODES,
+    max_episodes: int | None = None,
+    max_steps: int | None = None,
     queue=None,
 ) -> bool:
     """Enqueue ``run_benchmark_job`` for ``run_id``; idempotent on run_id.
@@ -129,6 +133,10 @@ def enqueue_run(
     already queued or running we do NOT enqueue a duplicate and return ``False``;
     a freshly enqueued job returns ``True``. Returns ``False`` when no queue is
     available (Redis/queue disabled).
+
+    ``max_episodes`` / ``max_steps`` carry the run's stored per-run budget. A
+    ``None`` value is passed through and resolved inside ``run_benchmark_job``
+    (run row -> server default), so the budget stays honest end to end.
     """
     q = queue if queue is not None else get_queue()
     if q is None:
@@ -162,6 +170,7 @@ def enqueue_run(
             "env": env,
             "track": track,
             "max_episodes": max_episodes,
+            "max_steps": max_steps,
         },
         job_id=job_id,
     )
@@ -194,14 +203,42 @@ def _set_status(run_id: str, status: str, **fields) -> None:
         session.commit()
 
 
+def _resolve_budget(
+    run_id: str,
+    max_episodes: int | None,
+    max_steps: int | None,
+) -> tuple[int, int]:
+    """Resolve the effective per-run budget.
+
+    Precedence: explicit argument -> the run row's stored budget -> the server
+    default. Reading the row here (rather than trusting the enqueue-time values)
+    keeps the budget honest even when the job is replayed.
+    """
+    if max_episodes is None or max_steps is None:
+        from worldmodel_server.db import SessionLocal
+        from worldmodel_server.models import RunEntry
+
+        with SessionLocal() as session:
+            item = session.get(RunEntry, run_id)
+            if item is not None:
+                if max_episodes is None:
+                    max_episodes = item.max_episodes
+                if max_steps is None:
+                    max_steps = item.max_steps
+
+    resolved_episodes = max_episodes if max_episodes is not None else DEFAULT_MAX_EPISODES
+    resolved_steps = max_steps if max_steps is not None else DEFAULT_MAX_STEPS
+    return resolved_episodes, resolved_steps
+
+
 def run_benchmark_job(
     run_id: str,
     agent: str,
     env: str,
     track: str = "test",
     *,
-    max_episodes: int = DEFAULT_MAX_EPISODES,
-    max_steps: int = DEFAULT_MAX_STEPS,
+    max_episodes: int | None = None,
+    max_steps: int | None = None,
 ) -> dict:
     """Run a real evaluation for ``run_id`` and record the results.
 
@@ -210,12 +247,18 @@ def run_benchmark_job(
     storage layer (so the row works on both local and S3 backends) and updates
     the denormalized leaderboard columns.
 
+    The evaluation budget is per-run: ``max_episodes`` / ``max_steps`` default to
+    the values stored on the run row, falling back to the server defaults
+    (``DEFAULT_MAX_EPISODES`` / ``DEFAULT_MAX_STEPS``) only when neither is set.
+
     Returns a small result dict (also used as the RQ job return value). Re-raises
     on failure AFTER marking the run failed, so the worker records the failure.
     """
     from worldmodel_gym.eval.harness import evaluate_and_write
 
     from worldmodel_server.storage import save_run_artifact, storage_status
+
+    max_episodes, max_steps = _resolve_budget(run_id, max_episodes, max_steps)
 
     _set_status(run_id, STATUS_RUNNING)
 

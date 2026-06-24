@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import localFont from "next/font/local";
 
 import { Nav } from "@/components/nav";
@@ -61,8 +62,12 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // The nonce is generated per request in middleware.ts and forwarded via the
+  // `x-nonce` request header. Reading it here lets Next.js stamp the nonce onto
+  // its inline bootstrap scripts so they pass the nonce-based CSP.
+  const nonce = headers().get("x-nonce") ?? undefined;
   return (
-    <html lang="en" className={`${cmuSerif.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${cmuSerif.variable} ${plexMono.variable}`} nonce={nonce}>
       <body className="text-[var(--ink)]">
         <a href="#main-content" className="skip-link">
           Skip to content

@@ -314,24 +314,15 @@ def create_run(
         agent=payload.agent,
         track=payload.track,
         status="created",
+        max_episodes=payload.max_episodes,
+        max_steps=payload.max_steps,
         created_by=principal.identifier,
     )
     session.add(item)
     session.commit()
     session.refresh(item)
 
-    return RunResponse(
-        id=item.id,
-        env=item.env,
-        agent=item.agent,
-        track=item.track,
-        status=item.status,
-        created_by=item.created_by,
-        storage_backend=item.storage_backend,
-        created_at=item.created_at,
-        updated_at=item.updated_at,
-        metrics={},
-    )
+    return _to_response(item)
 
 
 @app.post("/api/runs/{run_id}/upload", response_model=RunResponse)
@@ -626,6 +617,8 @@ def trigger_demo_run(
         agent=item.agent,
         env=item.env,
         track=item.track,
+        max_episodes=item.max_episodes,
+        max_steps=item.max_steps,
     )
     if enqueued:
         item.status = "queued"
@@ -730,6 +723,8 @@ def _to_response(item: RunEntry) -> RunResponse:
         agent=item.agent,
         track=item.track,
         status=item.status,
+        max_episodes=item.max_episodes,
+        max_steps=item.max_steps,
         created_by=item.created_by,
         storage_backend=item.storage_backend,
         created_at=item.created_at,

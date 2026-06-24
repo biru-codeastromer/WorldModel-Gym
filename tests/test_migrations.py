@@ -49,6 +49,8 @@ def test_migrations_roundtrip_on_sqlite(tmp_path, monkeypatch):
         columns = _columns(engine, "runs")
         assert "success_rate" in columns
         assert "mean_return" in columns
+        assert "max_episodes" in columns
+        assert "max_steps" in columns
         assert "ix_runs_leaderboard" in _indexes(engine, "runs")
     finally:
         engine.dispose()
@@ -214,3 +216,39 @@ def test_artifact_paths_normalized_to_agnostic_keys(tmp_path, monkeypatch):
     # Downgrade/upgrade round-trips cleanly on sqlite.
     command.downgrade(config, "20260415_01")
     command.upgrade(config, "head")
+
+
+def test_eval_budget_columns_added_and_downgrade_drops_them(tmp_path, monkeypatch):
+    db_path = tmp_path / "migration_budget.db"
+    db_url = f"sqlite:///{db_path}"
+    _point_settings_at(monkeypatch, db_url)
+    config = _alembic_config(db_url)
+
+    # The revision *before* the per-run budget columns exist.
+    command.upgrade(config, "20260425_01")
+    engine = sa.create_engine(db_url)
+    try:
+        columns = _columns(engine, "runs")
+        assert "max_episodes" not in columns
+        assert "max_steps" not in columns
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = sa.create_engine(db_url)
+    try:
+        columns = _columns(engine, "runs")
+        assert "max_episodes" in columns
+        assert "max_steps" in columns
+    finally:
+        engine.dispose()
+
+    # Downgrade is a true inverse: both columns are dropped again.
+    command.downgrade(config, "20260425_01")
+    engine = sa.create_engine(db_url)
+    try:
+        columns = _columns(engine, "runs")
+        assert "max_episodes" not in columns
+        assert "max_steps" not in columns
+    finally:
+        engine.dispose()

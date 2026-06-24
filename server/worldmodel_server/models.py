@@ -39,6 +39,10 @@ class RunEntry(Base):
     #   created -> queued -> running -> completed | failed   (async job tier)
     # plus "uploaded" for runs whose artifacts were submitted directly.
     status: Mapped[str] = mapped_column(String(32), default="created")
+    # Per-run evaluation budget. NULL means "use the server default" so existing
+    # rows and runs created without an explicit budget keep working unchanged.
+    max_episodes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     success_rate: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     mean_return: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     metrics_json: Mapped[str] = mapped_column(Text, default="{}")

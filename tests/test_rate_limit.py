@@ -55,22 +55,64 @@ def test_redis_allows_n_then_blocks_and_reports_retry_after():
     assert 1 <= blocked.retry_after <= 60
 
 
-def test_redis_window_resets(monkeypatch):
+def test_redis_window_slides_forward(monkeypatch):
     server = fakeredis.FakeServer()
     client = fakeredis.FakeStrictRedis(server=server)
     limiter = RedisRateLimiter(client, window_seconds=60)
 
     import worldmodel_server.rate_limit as rl
 
-    # Pin to a fixed window first.
-    monkeypatch.setattr(rl.time, "time", lambda: 1_000_000.0)
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr(rl.time, "time", lambda: now["t"])
+
     for _ in range(3):
         assert limiter.hit("u", 3).allowed is True
     assert limiter.hit("u", 3).allowed is False
 
-    # Jump to the next window: the key rolls over, so requests are allowed again.
-    monkeypatch.setattr(rl.time, "time", lambda: 1_000_000.0 + 120)
+    # Advance past the window so every earlier hit ages out; the sliding window
+    # is now empty and requests are allowed again.
+    now["t"] += 61
     assert limiter.hit("u", 3).allowed is True
+
+
+def test_redis_sliding_window_blocks_2x_across_boundary(monkeypatch):
+    # A fixed-window counter would allow ~2x the limit by firing limit hits at
+    # the end of one window and limit more at the start of the next. The sliding
+    # window must NOT: any burst inside any trailing 60s span is capped at limit.
+    server = fakeredis.FakeServer()
+    client = fakeredis.FakeStrictRedis(server=server)
+    limiter = RedisRateLimiter(client, window_seconds=60)
+
+    import worldmodel_server.rate_limit as rl
+
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr(rl.time, "time", lambda: now["t"])
+
+    # Fill the limit late in a notional fixed window.
+    now["t"] = 1_000_059.0
+    for _ in range(3):
+        assert limiter.hit("u", 3).allowed is True
+
+    # 2s later we'd cross a fixed-window boundary (…059 -> …061), but only 2s of
+    # real time has passed, so all 3 earlier hits are still in the trailing 60s.
+    now["t"] = 1_000_061.0
+    blocked = limiter.hit("u", 3)
+    assert blocked.allowed is False
+    assert blocked.remaining == 0
+    # The oldest hit was at …059, so it leaves the window ~58s from now.
+    assert 55 <= blocked.retry_after <= 60
+
+    # Even partway through, the burst is still in-window and stays blocked:
+    # at +30s the oldest hit (…059) is only 31s old, well inside the 60s window.
+    now["t"] = 1_000_091.0
+    assert limiter.hit("u", 3).allowed is False
+
+    # Only once the original burst ages out of the trailing window do slots free
+    # up again. All three landed at …059, so they leave together at …059 + 60.
+    now["t"] = 1_000_119.5
+    for _ in range(3):
+        assert limiter.hit("u", 3).allowed is True
+    assert limiter.hit("u", 3).allowed is False
 
 
 def test_two_redis_limiters_share_state():

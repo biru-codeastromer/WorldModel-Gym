@@ -395,3 +395,81 @@ def test_reupload_is_idempotent(server_modules):
     matching = [r for r in rows if r["run_id"] == "redo_run"]
     assert len(matching) == 1
     assert matching[0]["success_rate"] == 0.7
+
+
+def test_create_run_persists_eval_budget(server_modules):
+    modules = server_modules()
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    run_model = modules["worldmodel_server.models"].RunEntry
+    client, secret = _make_writer_client(modules)
+    try:
+        resp = client.post(
+            "/api/runs",
+            json={
+                "id": "budget_run",
+                "env": "memory_maze",
+                "agent": "random",
+                "track": "test",
+                "max_episodes": 32,
+                "max_steps": 250,
+            },
+            headers={"x-api-key": secret},
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    # The budget is echoed back on the run response...
+    assert body["max_episodes"] == 32
+    assert body["max_steps"] == 250
+    # ...and persisted on the row.
+    with session_local() as session:
+        item = session.get(run_model, "budget_run")
+        assert item.max_episodes == 32
+        assert item.max_steps == 250
+
+
+def test_create_run_defaults_budget_to_null_when_unset(server_modules):
+    modules = server_modules()
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    run_model = modules["worldmodel_server.models"].RunEntry
+    client, secret = _make_writer_client(modules)
+    try:
+        resp = client.post(
+            "/api/runs",
+            json={"id": "nobudget_run", "env": "memory_maze", "agent": "random", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["max_episodes"] is None
+    assert body["max_steps"] is None
+    with session_local() as session:
+        item = session.get(run_model, "nobudget_run")
+        assert item.max_episodes is None
+        assert item.max_steps is None
+
+
+def test_create_run_rejects_out_of_bounds_budget(server_modules):
+    modules = server_modules()
+    client, secret = _make_writer_client(modules)
+    try:
+        resp = client.post(
+            "/api/runs",
+            json={
+                "id": "bad_budget",
+                "env": "memory_maze",
+                "agent": "random",
+                "track": "test",
+                "max_episodes": 0,
+            },
+            headers={"x-api-key": secret},
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 422

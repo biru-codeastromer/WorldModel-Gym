@@ -332,3 +332,126 @@ def test_leaderboard_cache_serves_within_ttl_and_busts_on_upload(monkeypatch, tm
     run_ids = {r["run_id"] for r in rows}
     assert "buster_run" in run_ids
     assert "cached_hidden" in run_ids  # bust revealed the previously-hidden row too
+
+
+# --------------------------------------------------------------------------- #
+# Per-run evaluation budget resolution
+# --------------------------------------------------------------------------- #
+
+
+def _capture_budget(monkeypatch, modules):
+    """Patch the harness so run_benchmark_job records the budget it was given.
+
+    Returns a dict that is populated with ``max_episodes`` / ``max_steps`` once a
+    job runs, so a test can assert on the effective (resolved) budget without
+    running a real evaluation.
+    """
+    captured: dict[str, int] = {}
+
+    def _fake_evaluate_and_write(*, max_episodes, budget, out_dir, run_id, **_kwargs):
+        from pathlib import Path
+
+        captured["max_episodes"] = max_episodes
+        captured["max_steps"] = budget["max_steps"]
+        produced = Path(out_dir) / run_id
+        produced.mkdir(parents=True, exist_ok=True)
+        (produced / "metrics.json").write_text('{"success_rate": 1.0, "mean_return": 1.0}')
+        (produced / "trace.jsonl").write_text("")
+        (produced / "config.yaml").write_text("")
+        return {}, str(produced)
+
+    import worldmodel_gym.eval.harness as harness
+
+    monkeypatch.setattr(harness, "evaluate_and_write", _fake_evaluate_and_write)
+    return captured
+
+
+def _seed_run(modules, run_id, *, max_episodes=None, max_steps=None):
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    run_model = modules["worldmodel_server.models"].RunEntry
+    modules["worldmodel_server.migrations"].run_migrations()
+    with session_local() as session:
+        session.add(
+            run_model(
+                id=run_id,
+                env="memory_maze",
+                agent="random",
+                track="test",
+                status="queued",
+                max_episodes=max_episodes,
+                max_steps=max_steps,
+            )
+        )
+        session.commit()
+
+
+def test_job_uses_runs_stored_budget_when_args_unset(monkeypatch, tmp_path):
+    modules = load_modules(monkeypatch, tmp_path)
+    runner = modules["worldmodel_server.runner"]
+    _seed_run(modules, "budget_job", max_episodes=7, max_steps=33)
+    captured = _capture_budget(monkeypatch, modules)
+
+    runner.run_benchmark_job("budget_job", "random", "memory_maze", "test")
+
+    assert captured == {"max_episodes": 7, "max_steps": 33}
+
+
+def test_job_falls_back_to_server_defaults_when_budget_unset(monkeypatch, tmp_path):
+    modules = load_modules(monkeypatch, tmp_path)
+    runner = modules["worldmodel_server.runner"]
+    _seed_run(modules, "default_job")
+    captured = _capture_budget(monkeypatch, modules)
+
+    runner.run_benchmark_job("default_job", "random", "memory_maze", "test")
+
+    assert captured["max_episodes"] == runner.DEFAULT_MAX_EPISODES
+    assert captured["max_steps"] == runner.DEFAULT_MAX_STEPS
+    # The Phase-1 default budget is statistically meaningful, not a smoke test.
+    assert runner.DEFAULT_MAX_EPISODES == 20
+
+
+def test_explicit_budget_argument_overrides_run_row(monkeypatch, tmp_path):
+    modules = load_modules(monkeypatch, tmp_path)
+    runner = modules["worldmodel_server.runner"]
+    _seed_run(modules, "override_job", max_episodes=7, max_steps=33)
+    captured = _capture_budget(monkeypatch, modules)
+
+    runner.run_benchmark_job(
+        "override_job", "random", "memory_maze", "test", max_episodes=3, max_steps=12
+    )
+
+    assert captured == {"max_episodes": 3, "max_steps": 12}
+
+
+def test_trigger_enqueues_runs_stored_budget(monkeypatch, tmp_path):
+    modules = load_modules(monkeypatch, tmp_path, queue_enabled=True, redis_url="redis://fake")
+    runner = modules["worldmodel_server.runner"]
+
+    server = fakeredis.FakeServer()
+    queue = _build_queue(server)
+    monkeypatch.setattr(runner, "get_queue", lambda connection=None: queue)
+    monkeypatch.setattr(modules["worldmodel_server.main"], "enqueue_run", runner.enqueue_run)
+
+    client, secret = _admin_client(modules)
+    try:
+        client.post(
+            "/api/runs",
+            json={
+                "id": "trig_budget",
+                "env": "memory_maze",
+                "agent": "random",
+                "track": "test",
+                "max_episodes": 9,
+                "max_steps": 44,
+            },
+            headers={"x-api-key": secret},
+        )
+        resp = client.post("/api/runs/trig_budget/trigger", headers={"x-api-key": secret})
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 202
+    assert len(queue.jobs) == 1
+    job_kwargs = queue.jobs[0].kwargs
+    assert job_kwargs["max_episodes"] == 9
+    assert job_kwargs["max_steps"] == 44

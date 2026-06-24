@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import logging
 import threading
 import time
@@ -65,15 +66,33 @@ class SlidingWindowRateLimiter:
 
 
 class RedisRateLimiter:
-    """Fixed-window limiter backed by Redis so all replicas share one counter.
+    """Sliding-window limiter backed by a Redis sorted set per key.
 
-    Each call atomically INCRs a window-scoped key in a pipeline and sets its
-    EXPIRE, so the counter is shared across replicas and old windows clean
-    themselves up via the TTL. The key embeds the current window index, so
-    refreshing the TTL on every hit is harmless: the key only ever lives for the
-    window it names. If Redis is unreachable at call time the limiter fails OPEN
-    to the in-process fallback (logging once) rather than turning a Redis outage
-    into a flood of 500s.
+    Unlike a fixed-window counter (which can admit up to ~2x the limit straddling
+    a window boundary), this keeps one ZSET per key whose members are the
+    timestamps of the hits in the trailing ``window_seconds``. Each call runs a
+    single atomic pipeline that:
+
+      1. ZREMRANGEBYSCORE drops entries older than ``now - window_seconds``.
+      2. ZADD inserts the current hit (a unique member so identical timestamps
+         never collide and overwrite each other).
+      3. ZCARD counts the live entries in the window.
+      4. ZRANGE ... WITHSCORES reads the oldest surviving entry for retry_after.
+      5. EXPIRE refreshes the key's TTL to ~window_seconds so idle keys reap
+         themselves.
+
+    The whole sequence is one round-trip in a MULTI/EXEC pipeline, so the count
+    is computed against the same snapshot the ZADD wrote into and the limiter is
+    correct across concurrent replicas sharing the same Redis.
+
+    A request is allowed when the post-insert count is ``<= limit_per_minute``.
+    When it is over the limit the just-added member is removed again so a blocked
+    request does not itself push the oldest entry's expiry forward, and
+    retry_after is derived from when the oldest in-window entry will fall out.
+
+    If Redis is unreachable at call time the limiter fails OPEN to the in-process
+    fallback (logging once) rather than turning a Redis outage into a flood of
+    500s.
     """
 
     def __init__(self, redis_client, window_seconds: int = WINDOW_SECONDS) -> None:
@@ -82,6 +101,9 @@ class RedisRateLimiter:
         self._fallback = SlidingWindowRateLimiter(window_seconds=window_seconds)
         self._warned_unavailable = False
         self._warn_lock = threading.Lock()
+        # Monotonic-ish disambiguator so two hits sharing a wall-clock timestamp
+        # still land as distinct ZSET members.
+        self._counter = itertools.count()
 
     def _warn_once(self, exc: Exception) -> None:
         with self._warn_lock:
@@ -94,29 +116,36 @@ class RedisRateLimiter:
         )
 
     def _redis_key(self, key: str) -> str:
-        # Bucket by wall-clock window so a key naturally rolls over and old
-        # windows expire on their own via the TTL set above.
-        window_index = int(time.time() // self.window_seconds)
-        return f"wmg:ratelimit:{key}:{window_index}"
+        return f"wmg:ratelimit:{key}"
 
     def hit(self, key: str, limit_per_minute: int) -> RateLimitResult:
+        now = time.time()
+        cutoff = now - self.window_seconds
         try:
             redis_key = self._redis_key(key)
+            # Unique member: score is the timestamp (used for windowing), and the
+            # member string carries a counter so equal timestamps don't collide.
+            member = f"{now:.6f}:{next(self._counter)}"
             pipe = self._redis.pipeline()
-            pipe.incr(redis_key)
+            pipe.zremrangebyscore(redis_key, "-inf", cutoff)
+            pipe.zadd(redis_key, {member: now})
+            pipe.zcard(redis_key)
+            pipe.zrange(redis_key, 0, 0, withscores=True)
             pipe.expire(redis_key, self.window_seconds)
-            pipe.ttl(redis_key)
-            incr_result, _expire_result, ttl_result = pipe.execute()
-            current = int(incr_result)
-            ttl = int(ttl_result)
-            if ttl < 0:
-                ttl = self.window_seconds
+            _removed, _added, card, oldest, _expired = pipe.execute()
+            current = int(card)
         except Exception as exc:  # noqa: BLE001 - any redis/connection error => fail open
             self._warn_once(exc)
             return self._fallback.hit(key, limit_per_minute)
 
         if current > limit_per_minute:
-            retry_after = max(1, ttl)
+            # Don't let a rejected request count toward (or refresh) the window.
+            try:
+                self._redis.zrem(redis_key, member)
+            except Exception:  # noqa: BLE001 - cleanup is best-effort
+                pass
+            oldest_score = float(oldest[0][1]) if oldest else now
+            retry_after = max(1, int(self.window_seconds - (now - oldest_score)))
             return RateLimitResult(allowed=False, remaining=0, retry_after=retry_after)
 
         remaining = max(limit_per_minute - current, 0)
