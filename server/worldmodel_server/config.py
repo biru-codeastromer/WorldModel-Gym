@@ -67,6 +67,12 @@ class Settings:
         self.log_level = os.getenv("WMG_LOG_LEVEL", "INFO").upper()
         self.bootstrap_api_key = os.getenv("WMG_BOOTSTRAP_API_KEY", "")
 
+        # Idempotency: how long a stored idempotent response stays replayable.
+        # A record older than this is treated as absent (a fresh request can
+        # reuse the same key) so the table self-prunes instead of growing
+        # without bound.
+        self.idempotency_ttl_hours = int(os.getenv("WMG_IDEMPOTENCY_TTL_HOURS", "24"))
+
         # --- Redis / async job queue / response caching (all OPTIONAL) ---
         # When WMG_REDIS_URL is empty, Redis is disabled: the rate limiter uses
         # its in-process fallback and the job queue is unavailable regardless of

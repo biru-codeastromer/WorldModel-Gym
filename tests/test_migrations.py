@@ -27,6 +27,10 @@ def _indexes(engine: sa.Engine, table: str) -> set[str]:
     return {index["name"] for index in inspector.get_indexes(table)}
 
 
+def _has_table(engine: sa.Engine, table: str) -> bool:
+    return sa.inspect(engine).has_table(table)
+
+
 def _point_settings_at(monkeypatch, db_url: str) -> None:
     # alembic/env.py overrides the config URL with worldmodel_server.config.settings.db_url,
     # which is a module-level singleton that may already be imported with a different URL.
@@ -216,6 +220,101 @@ def test_artifact_paths_normalized_to_agnostic_keys(tmp_path, monkeypatch):
     # Downgrade/upgrade round-trips cleanly on sqlite.
     command.downgrade(config, "20260415_01")
     command.upgrade(config, "head")
+
+
+def test_provenance_and_idempotency_added_and_downgrade_inverts(tmp_path, monkeypatch):
+    db_path = tmp_path / "migration_provenance.db"
+    db_url = f"sqlite:///{db_path}"
+    _point_settings_at(monkeypatch, db_url)
+    config = _alembic_config(db_url)
+
+    provenance_cols = {
+        "code_version",
+        "seed_protocol",
+        "package_versions",
+        "metrics_schema_version",
+    }
+
+    # The revision *before* provenance/idempotency exist.
+    command.upgrade(config, "20260430_01")
+    engine = sa.create_engine(db_url)
+    try:
+        assert provenance_cols.isdisjoint(_columns(engine, "runs"))
+        assert not _has_table(engine, "idempotency_records")
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = sa.create_engine(db_url)
+    try:
+        assert provenance_cols <= _columns(engine, "runs")
+        assert _has_table(engine, "idempotency_records")
+        idem_cols = _columns(engine, "idempotency_records")
+        assert {
+            "key",
+            "principal_id",
+            "method",
+            "path",
+            "request_fingerprint",
+            "response_status",
+            "response_body",
+            "created_at",
+        } <= idem_cols
+        assert "ix_idempotency_scope" in _indexes(engine, "idempotency_records")
+    finally:
+        engine.dispose()
+
+    # Round-trip: a unique-scoped insert works, then downgrade is a true inverse.
+    idem = sa.table(
+        "idempotency_records",
+        sa.column("key", sa.String),
+        sa.column("principal_id", sa.String),
+        sa.column("method", sa.String),
+        sa.column("path", sa.String),
+        sa.column("request_fingerprint", sa.String),
+        sa.column("response_status", sa.Integer),
+        sa.column("response_body", sa.Text),
+        sa.column("created_at", sa.DateTime),
+    )
+    import datetime as _dt
+
+    engine = sa.create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.insert(idem),
+                [
+                    {
+                        "key": "k1",
+                        "principal_id": "p1",
+                        "method": "POST",
+                        "path": "/api/runs",
+                        "request_fingerprint": "abc",
+                        "response_status": 201,
+                        "response_body": "{}",
+                        "created_at": _dt.datetime(2026, 5, 5, 0, 0, 0),
+                    }
+                ],
+            )
+    finally:
+        engine.dispose()
+
+    command.downgrade(config, "20260430_01")
+    engine = sa.create_engine(db_url)
+    try:
+        assert provenance_cols.isdisjoint(_columns(engine, "runs"))
+        assert not _has_table(engine, "idempotency_records")
+    finally:
+        engine.dispose()
+
+    # And upgrade again to confirm idempotent re-application.
+    command.upgrade(config, "head")
+    engine = sa.create_engine(db_url)
+    try:
+        assert provenance_cols <= _columns(engine, "runs")
+        assert _has_table(engine, "idempotency_records")
+    finally:
+        engine.dispose()
 
 
 def test_eval_budget_columns_added_and_downgrade_drops_them(tmp_path, monkeypatch):

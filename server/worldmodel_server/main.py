@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import threading
@@ -8,18 +9,41 @@ import uuid
 from contextlib import asynccontextmanager
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from worldmodel_server.auth import AuthenticatedPrincipal, ensure_bootstrap_api_key, require_scope
 from worldmodel_server.config import settings
 from worldmodel_server.db import SessionLocal, describe_database, engine, get_session
+from worldmodel_server.errors import (
+    problem_from_http_exception,
+    problem_from_validation_error,
+    problem_response,
+)
+from worldmodel_server.idempotency import (
+    find_idempotent_response,
+    fingerprint_request,
+    save_idempotent_response,
+)
 from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
-from worldmodel_server.rate_limit import rate_limiter
+from worldmodel_server.rate_limit import WINDOW_SECONDS, RateLimitResult, rate_limiter
 from worldmodel_server.request_logging import configure_logging, log_request_event, log_system_event
 from worldmodel_server.runner import enqueue_run
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
@@ -37,6 +61,7 @@ from worldmodel_server.storage import (
     storage_write_probe,
     validate_run_id,
 )
+from worldmodel_server.validation import ValidationProblem, validate_metrics
 
 # Hard ceiling on leaderboard page size, regardless of the requested ``limit``,
 # so a single request can never force the database to materialize an unbounded
@@ -71,6 +96,13 @@ class _TTLCache:
         with self._lock:
             self._version += 1
             self._store.clear()
+
+    @property
+    def version(self) -> int:
+        # Read the monotonic data-version stamp; callers fold it into ETags so a
+        # mutation that bumps the version necessarily changes downstream hashes.
+        with self._lock:
+            return self._version
 
     def get(self, key: str, ttl_seconds: int):
         if ttl_seconds <= 0:
@@ -181,6 +213,25 @@ if settings.enable_metrics and Instrumentator is not None:
     )
 
 
+# --------------------------------------------------------------------------- #
+# RFC 9457 problem+json exception handlers
+# --------------------------------------------------------------------------- #
+# Every error body still carries a top-level ``detail`` string (so the Next.js
+# web + Expo mobile clients keep working) while gaining the structured
+# ``type``/``title``/``status``/``instance`` fields and an ``application/
+# problem+json`` media type. Status codes are preserved exactly.
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return problem_from_http_exception(exc, instance=request.url.path)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError):
+    return problem_from_validation_error(exc, instance=request.url.path)
+
+
 def _client_host(request: Request) -> str:
     # X-Forwarded-For is client-spoofable unless we are actually behind a trusted
     # reverse proxy. Only honor it when explicitly configured (WMG_TRUST_PROXY_HEADERS),
@@ -207,32 +258,55 @@ def _should_rate_limit_public_request(request: Request) -> bool:
     return True
 
 
-def _enforce_principal_rate_limit(principal: AuthenticatedPrincipal) -> None:
+def _rate_limit_headers(limit: int, result: RateLimitResult) -> dict[str, str]:
+    """Standard ``X-RateLimit-*`` headers for a limiter decision.
+
+    ``X-RateLimit-Reset`` is expressed as the number of seconds until the
+    window frees up. On a rejection that is ``retry_after``; on an allowed call
+    the window is not pinned to any one entry, so we report the full window.
+    """
+    reset = result.retry_after if not result.allowed else WINDOW_SECONDS
+    return {
+        "X-RateLimit-Limit": str(limit),
+        "X-RateLimit-Remaining": str(result.remaining),
+        "X-RateLimit-Reset": str(reset),
+    }
+
+
+def _enforce_principal_rate_limit(
+    principal: AuthenticatedPrincipal,
+    response: Response | None = None,
+) -> None:
     # Key authenticated writes on the principal identity alone. Including the client
     # IP would let a single credential multiply its quota by rotating source/XFF IPs.
-    result = rate_limiter.hit(
-        f"write:{principal.identifier}",
-        principal.rate_limit_per_minute,
-    )
+    limit = principal.rate_limit_per_minute
+    result = rate_limiter.hit(f"write:{principal.identifier}", limit)
+    headers = _rate_limit_headers(limit, result)
     if not result.allowed:
         raise HTTPException(
             status_code=429,
             detail="authenticated write rate limit exceeded",
-            headers={"Retry-After": str(result.retry_after)},
+            headers={"Retry-After": str(result.retry_after), **headers},
         )
+    # Surface the quota on the success path so clients can pace themselves.
+    if response is not None:
+        for header, value in headers.items():
+            response.headers[header] = value
 
 
 def _require_write_access(
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(require_scope("runs:write")),
 ) -> AuthenticatedPrincipal:
-    _enforce_principal_rate_limit(principal)
+    _enforce_principal_rate_limit(principal, response)
     return principal
 
 
 def _require_admin_access(
+    response: Response,
     principal: AuthenticatedPrincipal = Depends(require_scope("admin")),
 ) -> AuthenticatedPrincipal:
-    _enforce_principal_rate_limit(principal)
+    _enforce_principal_rate_limit(principal, response)
     return principal
 
 
@@ -262,17 +336,21 @@ async def access_log_and_public_rate_limit(request: Request, call_next):
     request.state.request_id = request_id
     started_at = time.perf_counter()
 
+    public_rate_headers: dict[str, str] | None = None
     if _should_rate_limit_public_request(request):
         client_host = _client_host(request)
-        result = rate_limiter.hit(
-            f"public-read:{client_host}",
-            settings.public_read_rate_limit_per_minute,
-        )
+        limit = settings.public_read_rate_limit_per_minute
+        result = rate_limiter.hit(f"public-read:{client_host}", limit)
+        public_rate_headers = _rate_limit_headers(limit, result)
         if not result.allowed:
-            response = JSONResponse(
-                {"detail": "public API rate limit exceeded"},
-                status_code=429,
-                headers={"Retry-After": str(result.retry_after)},
+            response = problem_response(
+                429,
+                "public API rate limit exceeded",
+                instance=request.url.path,
+                headers={
+                    "Retry-After": str(result.retry_after),
+                    **public_rate_headers,
+                },
             )
             response.headers["x-request-id"] = request_id
             return response
@@ -295,14 +373,111 @@ async def access_log_and_public_rate_limit(request: Request, call_next):
         )
         if response is not None:
             response.headers.setdefault("x-request-id", request_id)
+            # Surface the quota on allowed public reads too, so clients can pace
+            # themselves rather than discovering the limit only on a 429.
+            if public_rate_headers is not None:
+                for header, value in public_rate_headers.items():
+                    response.headers.setdefault(header, value)
 
 
-@app.post("/api/runs", response_model=RunResponse)
+# --------------------------------------------------------------------------- #
+# Business routes
+# --------------------------------------------------------------------------- #
+# All ``/api/...`` business endpoints live on a single router mounted under BOTH
+# ``/api`` (unchanged, back-compat for the web proxy + mobile) and ``/api/v1``
+# (the canonical, versioned path). Health/metrics endpoints stay on ``app`` and
+# remain unversioned.
+api = APIRouter()
+
+# An idempotency record is scoped to ``(key, principal, method, path)``. The
+# stored ``path`` is the concrete request path, so ``/api/runs`` and
+# ``/api/v1/runs`` are scoped independently -- correct, since they are distinct
+# public surfaces.
+
+
+def _begin_idempotent(
+    session: Session,
+    request: Request,
+    key: str | None,
+    principal: AuthenticatedPrincipal,
+    fingerprint: str,
+):
+    """Resolve an ``Idempotency-Key`` before performing a write.
+
+    Returns:
+
+    * ``None`` -- no key, or a fresh key: the caller proceeds and must later call
+      :func:`_store_idempotent`.
+    * a :class:`JSONResponse` -- a stored response to replay verbatim (same key +
+      same request fingerprint).
+
+    Raises ``HTTPException(409)`` when the key was reused for a *different*
+    request body.
+    """
+    if not key:
+        return None
+    record, conflict = find_idempotent_response(
+        session,
+        key,
+        principal.identifier,
+        request.method,
+        request.url.path,
+        fingerprint,
+    )
+    if conflict:
+        raise HTTPException(
+            status_code=409,
+            detail="Idempotency-Key reused with a different request body",
+        )
+    if record is not None:
+        return JSONResponse(
+            status_code=record.response_status,
+            content=json.loads(record.response_body) if record.response_body else None,
+        )
+    return None
+
+
+def _store_idempotent(
+    session: Session,
+    request: Request,
+    key: str | None,
+    principal: AuthenticatedPrincipal,
+    fingerprint: str,
+    status_code: int,
+    body: RunResponse,
+) -> None:
+    """Persist a write's response so a later retry with the same key replays it.
+
+    No-op when no key was sent. The record is added+flushed within the caller's
+    transaction (which commits the side effect and the record atomically).
+    """
+    if not key:
+        return
+    save_idempotent_response(
+        session,
+        key,
+        principal.identifier,
+        request.method,
+        request.url.path,
+        fingerprint,
+        status_code,
+        body.model_dump_json(),
+    )
+
+
+@api.post("/runs", response_model=RunResponse)
 def create_run(
     payload: RunCreate,
+    request: Request,
     session: Session = Depends(get_session),
     principal: AuthenticatedPrincipal = Depends(_require_write_access),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    fingerprint = fingerprint_request(payload.model_dump(mode="json"))
+    replay = _begin_idempotent(session, request, idempotency_key, principal, fingerprint)
+    if replay is not None:
+        return replay
+
     run_id = validate_run_id(payload.id) if payload.id else uuid.uuid4().hex[:12]
     existing = session.get(RunEntry, run_id)
     if existing:
@@ -317,15 +492,23 @@ def create_run(
         max_episodes=payload.max_episodes,
         max_steps=payload.max_steps,
         created_by=principal.identifier,
+        code_version=payload.code_version,
+        seed_protocol=payload.seed_protocol,
     )
     session.add(item)
+    # Flush so column defaults (e.g. metrics_json="{}", timestamps) are populated
+    # before we serialize the response for the idempotency record.
+    session.flush()
+
+    body = _to_response(item)
+    _store_idempotent(session, request, idempotency_key, principal, fingerprint, 200, body)
     session.commit()
     session.refresh(item)
 
     return _to_response(item)
 
 
-@app.post("/api/runs/{run_id}/upload", response_model=RunResponse)
+@api.post("/runs/{run_id}/upload", response_model=RunResponse)
 async def upload_run_artifacts(
     request: Request,
     run_id: str,
@@ -334,6 +517,7 @@ async def upload_run_artifacts(
     config_file: UploadFile | None = File(default=None),
     session: Session = Depends(get_session),
     principal: AuthenticatedPrincipal = Depends(_require_write_access),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     item = _get_run_or_404(session, run_id)
 
@@ -342,6 +526,37 @@ async def upload_run_artifacts(
     metrics_bytes = await _read_upload_bytes(metrics_file) if metrics_file else None
     trace_bytes = await _read_upload_bytes(trace_file) if trace_file else None
     config_bytes = await _read_upload_bytes(config_file) if config_file else None
+
+    # Honor an optional Idempotency-Key BEFORE any storage write or DB mutation so
+    # a replayed retry never re-runs the side effect. The fingerprint covers the
+    # uploaded bodies so reusing the key for a different upload conflicts.
+    fingerprint = fingerprint_request(
+        b"".join(part for part in (metrics_bytes, trace_bytes, config_bytes) if part)
+        + run_id.encode("utf-8")
+    )
+    replay = _begin_idempotent(session, request, idempotency_key, principal, fingerprint)
+    if replay is not None:
+        return replay
+
+    # Validate the uploaded metrics up front and stamp the schema version it
+    # passed. A physically-impossible document (e.g. success_rate=1.5) is rejected
+    # with a 422 problem+json before anything is persisted.
+    validated_metrics: dict | None = None
+    metrics_schema_version: str | None = None
+    if metrics_bytes is not None:
+        raw_metrics = _parse_metrics_from_bytes(metrics_bytes)
+        try:
+            validated_metrics, metrics_schema_version = validate_metrics(raw_metrics)
+        except ValidationProblem as exc:
+            # Surface the readable summary as ``detail`` (legacy contract) and the
+            # per-field failures under the ``errors`` extension of the problem doc.
+            return problem_response(
+                422,
+                str(exc),
+                title="Unprocessable Entity",
+                instance=request.url.path,
+                errors=exc.errors,
+            )
 
     # Track keys written in THIS request so we can best-effort delete them if the
     # DB commit fails (avoids orphaned artifacts) or if a later storage write
@@ -369,16 +584,19 @@ async def upload_run_artifacts(
         )
         raise HTTPException(status_code=502, detail="failed to persist run artifacts") from exc
 
-    if metrics_bytes is not None:
-        metrics = _parse_metrics_from_bytes(metrics_bytes)
-        item.metrics_json = json.dumps(metrics)
-        item.success_rate = _coerce_float(metrics.get("success_rate"))
-        item.mean_return = _coerce_float(metrics.get("mean_return"))
+    if validated_metrics is not None:
+        item.metrics_json = json.dumps(validated_metrics)
+        item.success_rate = _coerce_float(validated_metrics.get("success_rate"))
+        item.mean_return = _coerce_float(validated_metrics.get("mean_return"))
+        item.metrics_schema_version = metrics_schema_version
     item.status = "uploaded"
     item.storage_backend = storage_status()["backend"]
     item.created_by = principal.identifier
 
     session.add(item)
+    session.flush()
+    body = _to_response(item)
+    _store_idempotent(session, request, idempotency_key, principal, fingerprint, 200, body)
     try:
         session.commit()
     except Exception as exc:
@@ -401,8 +619,9 @@ async def upload_run_artifacts(
     return _to_response(item)
 
 
-@app.get("/api/leaderboard", response_model=list[LeaderboardRow])
+@api.get("/leaderboard", response_model=list[LeaderboardRow])
 def leaderboard(
+    request: Request,
     response: Response,
     track: str = Query(default="test"),
     env: str | None = Query(default=None),
@@ -417,7 +636,7 @@ def leaderboard(
     cache_key = f"leaderboard:{track}:{env}:{agent}:{include_demo}:{limit}:{offset}"
     cached = _response_cache.get(cache_key, ttl)
     if cached is not None:
-        return cached
+        return _leaderboard_payload(request, response, cached)
 
     q = select(RunEntry).where(RunEntry.status == "uploaded", RunEntry.track == track)
     if env:
@@ -460,10 +679,56 @@ def leaderboard(
             )
         )
     _response_cache.set(cache_key, out, ttl)
-    return out
+    return _leaderboard_payload(request, response, out)
 
 
-@app.get("/api/tasks")
+def _leaderboard_etag(rows: list[LeaderboardRow]) -> str:
+    """A stable, strong ETag over the serialized leaderboard rows.
+
+    The hash is tied to the cache version so a mutation (upload/seed) that bumps
+    the version necessarily changes the ETag even if the serialized rows happen
+    to collide. Returned already quoted per RFC 9110.
+    """
+    serialized = json.dumps(
+        [row.model_dump(mode="json") for row in rows],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    seed = f"{_response_cache.version}:{serialized}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
+    return f'"{digest}"'
+
+
+def _leaderboard_payload(request: Request, response: Response, rows: list[LeaderboardRow]):
+    """Attach an ETag and honor ``If-None-Match`` with a 304.
+
+    Additive: a request without ``If-None-Match`` gets the usual 200 JSON list
+    (the existing contract). A matching conditional request gets a bodyless 304
+    carrying the same ETag and ``Cache-Control``.
+    """
+    etag = _leaderboard_etag(rows)
+    response.headers["ETag"] = etag
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and _etag_matches(if_none_match, etag):
+        not_modified = Response(status_code=304)
+        not_modified.headers["ETag"] = etag
+        not_modified.headers["Cache-Control"] = response.headers.get(
+            "Cache-Control", _cache_control_header(settings.response_cache_ttl_seconds)
+        )
+        return not_modified
+    return rows
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    # ``If-None-Match`` may be ``*`` or a comma-separated list of (weak) tags.
+    candidates = {tag.strip() for tag in if_none_match.split(",")}
+    if "*" in candidates:
+        return True
+    normalized = {tag[2:] if tag.startswith("W/") else tag for tag in candidates}
+    return etag in normalized
+
+
+@api.get("/tasks")
 def tasks(request: Request, response: Response):
     ttl = settings.response_cache_ttl_seconds
     response.headers["Cache-Control"] = _cache_control_header(ttl)
@@ -493,19 +758,19 @@ def tasks(request: Request, response: Response):
     return payload
 
 
-@app.get("/api/runs/{run_id}", response_model=RunResponse)
+@api.get("/runs/{run_id}", response_model=RunResponse)
 def get_run(run_id: str, session: Session = Depends(get_session)):
     return _to_response(_get_run_or_404(session, run_id))
 
 
-@app.get("/api/runs/{run_id}/trace")
+@api.get("/runs/{run_id}/trace")
 def get_trace(run_id: str, session: Session = Depends(get_session)):
     item = _get_run_or_404(session, run_id)
     key = item.trace_path or artifact_key(item.id, "trace.jsonl")
     return _artifact_response(key, "application/x-ndjson", "trace not found")
 
 
-@app.get("/api/runs/{run_id}/metrics")
+@api.get("/runs/{run_id}/metrics")
 def get_metrics(request: Request, run_id: str, session: Session = Depends(get_session)):
     item = _get_run_or_404(session, run_id)
     key = artifact_key(item.id, "metrics.json")
@@ -528,7 +793,7 @@ def get_metrics(request: Request, run_id: str, session: Session = Depends(get_se
         return JSONResponse(_parse_metrics(item.metrics_json))
 
 
-@app.get("/api/runs/{run_id}/config")
+@api.get("/runs/{run_id}/config")
 def get_config(run_id: str, session: Session = Depends(get_session)):
     item = _get_run_or_404(session, run_id)
     key = item.config_path or artifact_key(item.id, "config.yaml")
@@ -583,7 +848,7 @@ def _log_admin_audit_event(
     )
 
 
-@app.post("/api/runs/{run_id}/trigger", status_code=202, response_model=RunResponse)
+@api.post("/runs/{run_id}/trigger", status_code=202, response_model=RunResponse)
 def trigger_demo_run(
     request: Request,
     response: Response,
@@ -732,6 +997,9 @@ def _to_response(item: RunEntry) -> RunResponse:
         metrics=metrics,
         trace_url=trace_url,
         config_url=config_url,
+        code_version=item.code_version,
+        seed_protocol=item.seed_protocol,
+        metrics_schema_version=item.metrics_schema_version,
     )
 
 
@@ -768,3 +1036,15 @@ def _storage_check() -> dict[str, object]:
     details: dict[str, object] = {**storage_status(), **probe}
     details.setdefault("ok", False)
     return details
+
+
+# --------------------------------------------------------------------------- #
+# Router mounting
+# --------------------------------------------------------------------------- #
+# Mount the business router under BOTH the legacy ``/api`` prefix (so the Next.js
+# web proxy + Expo mobile keep working unchanged) and the canonical, versioned
+# ``/api/v1`` prefix. Done after every ``@api`` route is registered so both
+# inclusions copy the complete route set. Health/metrics stay on ``app`` and
+# remain unversioned.
+app.include_router(api, prefix="/api")
+app.include_router(api, prefix="/api/v1")

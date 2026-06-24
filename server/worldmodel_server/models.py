@@ -52,6 +52,47 @@ class RunEntry(Base):
     created_by: Mapped[str] = mapped_column(String(32), default="system", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    # --- Provenance + schema versioning (all nullable for backward compat) ---
+    # NULL on existing rows means "unknown provenance"; new submissions populate
+    # these so a leaderboard entry can be traced back to the exact code, seed
+    # protocol, and dependency set that produced it.
+    code_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    seed_protocol: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # JSON-encoded mapping of package name -> version. Stored as text so it works
+    # identically on sqlite and postgres.
+    package_versions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The METRICS_SCHEMA_VERSION the uploaded metrics validated against.
+    metrics_schema_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+
+class IdempotencyRecord(Base):
+    __tablename__ = "idempotency_records"
+
+    __table_args__ = (
+        # A single idempotency key is scoped to one principal + endpoint. The
+        # unique constraint enforces that scope and doubles as the lookup index
+        # for the read-before-write path.
+        Index(
+            "ix_idempotency_scope",
+            "key",
+            "principal_id",
+            "method",
+            "path",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(255), index=True)
+    principal_id: Mapped[str] = mapped_column(String(128), default="anonymous")
+    method: Mapped[str] = mapped_column(String(16))
+    path: Mapped[str] = mapped_column(String(512))
+    # Hash of the request body/params: lets us detect a key being reused for a
+    # *different* request (a conflict) versus a legitimate retry.
+    request_fingerprint: Mapped[str] = mapped_column(String(64))
+    response_status: Mapped[int] = mapped_column(Integer)
+    response_body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class ApiKey(Base):
