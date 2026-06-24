@@ -13,6 +13,7 @@ import type { TraceEpisode } from "@/lib/trace";
 import { Reveal, useHoverLift } from "@/components/motion";
 import { Sparkline } from "@/components/visuals";
 import { EpisodePlayer } from "@/components/trace";
+import { EmbedButton } from "@/components/embed";
 import {
   Badge,
   Button,
@@ -176,6 +177,11 @@ export default function RunViewerPage() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-3">
+            <EmbedButton
+              badgePath={`/runs/${encodeURIComponent(runId)}/badge`}
+              targetPath={`/runs/${encodeURIComponent(runId)}`}
+              subject={`run ${runId}`}
+            />
             <Link href="/leaderboard">
               <Button variant="secondary" size="sm" leftIcon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />}>
                 Leaderboard

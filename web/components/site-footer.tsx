@@ -12,7 +12,9 @@ const columns = [
       { label: "Overview", href: "/" },
       { label: "Tasks", href: "/tasks" },
       { label: "Leaderboard", href: "/leaderboard" },
-      { label: "Upload", href: "/upload" }
+      { label: "Upload", href: "/upload" },
+      { label: "About", href: "/about" },
+      { label: "Changelog", href: "/changelog" }
     ]
   },
   {

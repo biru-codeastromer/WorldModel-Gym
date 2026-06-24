@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpRight, GitCompareArrows, Trophy, Upload, X } from "lucide-react";
 
 import { LeaderboardChart } from "@/components/leaderboard-chart";
+import { EmbedButton } from "@/components/embed";
 import { Reveal } from "@/components/motion";
 import { GridWorld } from "@/components/visuals";
 import { compareHref, MAX_COMPARE } from "@/lib/compare";
@@ -196,11 +197,19 @@ export default function LeaderboardPage() {
             onChange={setTrack}
             options={TRACK_OPTIONS}
           />
-          <p className="font-mono text-xs text-fg-subtle">
-            {isLoading
-              ? "Loading rankings…"
-              : `${rows.length} ${rows.length === 1 ? "run" : "runs"} on the ${track} track`}
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="font-mono text-xs text-fg-subtle">
+              {isLoading
+                ? "Loading rankings…"
+                : `${rows.length} ${rows.length === 1 ? "run" : "runs"} on the ${track} track`}
+            </p>
+            <EmbedButton
+              badgePath={`/badge/${track}`}
+              targetPath={`/leaderboard?track=${track}`}
+              subject={`the ${track} track leader`}
+              label="Embed badge"
+            />
+          </div>
         </div>
       </Section>
 
