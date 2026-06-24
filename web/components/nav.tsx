@@ -1,11 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Github, Menu, X } from "lucide-react";
+import { Github, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { useCommandPalette } from "@/components/command-palette";
 import { ThemeToggle } from "@/components/theme";
 import { Button } from "@/components/ui";
 
@@ -33,6 +34,50 @@ function Logo() {
         </span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * Compact ⌘K affordance shown in the Nav. Opens the command palette and mirrors
+ * the platform-appropriate modifier glyph (⌘ on Apple, Ctrl elsewhere) once
+ * mounted client-side. Full pill on desktop, an icon-only button on mobile.
+ */
+function CommandKHint() {
+  const { setOpen } = useCommandPalette();
+  const [isApple, setIsApple] = useState(false);
+
+  useEffect(() => {
+    // Detect after mount to avoid hydration mismatch; default to Ctrl on SSR.
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform?: string } })
+        .userAgentData?.platform || navigator.platform;
+    setIsApple(/mac|iphone|ipad|ipod/i.test(platform));
+  }, []);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open command palette"
+        aria-keyshortcuts={isApple ? "Meta+K" : "Control+K"}
+        className="hidden h-9 items-center gap-2 rounded-full border border-border bg-surface pl-3 pr-2 text-fg-muted transition-colors hover:border-border-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg lg:inline-flex"
+      >
+        <Search className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="font-mono text-[0.72rem]">Search</span>
+        <kbd className="ml-1 inline-flex items-center gap-0.5 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[0.62rem] leading-none text-fg-subtle">
+          <span aria-hidden="true">{isApple ? "⌘" : "Ctrl"}</span>K
+        </kbd>
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open command palette"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-fg-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+      >
+        <Search className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </>
   );
 }
 
@@ -111,6 +156,7 @@ export function Nav() {
         </nav>
 
         <div className="flex items-center gap-2 md:gap-3">
+          <CommandKHint />
           <a
             href={REPO}
             target="_blank"

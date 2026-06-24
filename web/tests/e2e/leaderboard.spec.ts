@@ -112,3 +112,54 @@ test("leaderboard rows navigate into a run detail view and back", async ({
   await page.getByRole("link", { name: /back to leaderboard/i }).click();
   await expect(page).toHaveURL(/\/leaderboard/);
 });
+
+test("the command palette opens with the keyboard shortcut", async ({ page }) => {
+  await page.goto("/");
+
+  // The global ⌘K / Ctrl-K shortcut opens the command palette dialog.
+  await page.keyboard.press("ControlOrMeta+KeyK");
+
+  const palette = page.getByRole("dialog", { name: /command palette/i });
+  await expect(palette).toBeVisible();
+
+  // The search input is focused and the core navigation actions are listed.
+  await expect(
+    palette.getByPlaceholder(/search actions/i)
+  ).toBeFocused();
+  await expect(
+    palette.getByRole("option", { name: /leaderboard/i }).first()
+  ).toBeVisible();
+
+  // Escape closes it again.
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+});
+
+test("selecting two runs and pressing Compare opens the comparison view", async ({
+  page
+}) => {
+  await page.goto("/leaderboard");
+
+  // Seeded track with data.
+  const tablist = page.getByRole("tablist", { name: /track/i });
+  await tablist.getByRole("tab", { name: /^test$/i }).click();
+
+  const table = page.locator("table");
+  await expect(table).toBeVisible({ timeout: 15_000 });
+
+  // The per-row comparison checkboxes are exposed by accessible name
+  // ("Add run … to comparison"). Tick the first two available.
+  const checks = table.getByRole("checkbox", { name: /add run .* to comparison/i });
+  await expect(checks.first()).toBeVisible({ timeout: 15_000 });
+  await checks.nth(0).check();
+  await checks.nth(1).check();
+
+  // The floating selection bar offers a Compare link once two are chosen.
+  const compare = page.getByRole("link", { name: /compare 2 runs/i });
+  await expect(compare).toBeVisible();
+  await compare.click();
+
+  await expect(page).toHaveURL(/\/compare\?runs=/);
+  // The comparison surface renders its run-comparison heading.
+  await expect(page.getByRole("heading", { name: /comparing 2 runs/i })).toBeVisible();
+});

@@ -5,6 +5,7 @@ import binascii
 import hashlib
 import json
 import logging
+import math
 import threading
 import time
 import uuid
@@ -806,6 +807,8 @@ def leaderboard(
                     metrics.get("planning_cost", {}).get("wall_clock_ms_per_step", 0.0)
                 ),
                 created_at=row.created_at,
+                success_rate_ci=_leaderboard_ci(metrics.get("success_rate_ci")),
+                model_fidelity=_leaderboard_fidelity(metrics.get("model_fidelity")),
             )
         )
 
@@ -1061,6 +1064,47 @@ def _coerce_float(value: object) -> float:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return 0.0
+
+
+def _leaderboard_ci(value: object) -> list[float] | None:
+    """Pull a finite ``[low, high]`` confidence interval out of a metrics blob.
+
+    Uploads are validated (see ``validate_metrics``), but the stored blob is
+    parsed back as free-form JSON, so a legacy/hand-seeded row could carry a
+    malformed value. Anything that isn't a well-formed ordered pair of finite
+    numbers degrades to ``None`` -- the row keeps ranking, the whisker just
+    stays hidden, rather than 500-ing the whole leaderboard.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    low, high = value
+    if isinstance(low, bool) or isinstance(high, bool):
+        return None
+    if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
+        return None
+    low, high = float(low), float(high)
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return None
+    return [low, high]
+
+
+def _leaderboard_fidelity(value: object) -> dict[str, float] | None:
+    """Pull a ``model_fidelity`` map of finite scores out of a metrics blob.
+
+    Non-numeric, boolean, or non-finite entries are dropped; an absent, empty,
+    or non-object block degrades to ``None`` so the optional fidelity column
+    simply stays hidden for that row.
+    """
+    if not isinstance(value, dict):
+        return None
+    cleaned: dict[str, float] = {}
+    for key, raw in value.items():
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            continue
+        num = float(raw)
+        if math.isfinite(num):
+            cleaned[str(key)] = num
+    return cleaned or None
 
 
 def _request_id(request: Request) -> str | None:

@@ -100,7 +100,13 @@ export const LeaderboardRowSchema = z.object({
   success_rate: finiteNumberRequired,
   mean_return: finiteNumberRequired,
   planning_cost_ms_per_step: finiteNumberRequired,
-  created_at: z.string()
+  created_at: z.string(),
+  // Optional ranking extras now surfaced by the server's /api/leaderboard. Both
+  // are nullish so older payloads (which omit them) still parse: the CI reuses
+  // the NaN-guarded ConfidenceIntervalSchema and lights up the success-rate
+  // whisker; model_fidelity feeds the optional fidelity column.
+  success_rate_ci: ConfidenceIntervalSchema,
+  model_fidelity: ModelFidelitySchema.nullish()
 });
 
 export type LeaderboardRow = z.infer<typeof LeaderboardRowSchema>;

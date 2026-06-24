@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Trophy, Upload } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowUpRight, GitCompareArrows, Trophy, Upload, X } from "lucide-react";
 
 import { LeaderboardChart } from "@/components/leaderboard-chart";
 import { Reveal } from "@/components/motion";
 import { GridWorld } from "@/components/visuals";
+import { compareHref, MAX_COMPARE } from "@/lib/compare";
 import {
   Badge,
   Button,
@@ -41,13 +43,14 @@ const TRACK_OPTIONS: { value: Track; label: string }[] = [
 ];
 
 /**
- * The leaderboard row schema is strict, so CI / fidelity extras are stripped at
- * parse time and won't be present at runtime. We still probe defensively so the
- * CI whisker lights up automatically if the API/zod schema later surfaces it,
- * without touching lib/api.ts here.
+ * Half-width of the success-rate confidence interval, or undefined when the row
+ * carries no usable CI. The server now surfaces success_rate_ci as an ordered
+ * [low, high] pair (NaN-guarded by ConfidenceIntervalSchema in lib/api.ts); we
+ * still re-check shape and finiteness here so a partial pair degrades to "no
+ * whisker" instead of drawing a bogus range.
  */
 function readCiHalfWidth(row: LeaderboardRow): number | undefined {
-  const ci = (row as { success_rate_ci?: unknown }).success_rate_ci;
+  const ci = row.success_rate_ci;
   if (!Array.isArray(ci) || ci.length < 2) return undefined;
   const lo = toFiniteNumber(ci[0]);
   const hi = toFiniteNumber(ci[1]);
@@ -55,15 +58,72 @@ function readCiHalfWidth(row: LeaderboardRow): number | undefined {
   return Math.abs(hi - lo) / 2;
 }
 
+/** Rollout horizons shown in the fidelity column, nearest-first. */
+const FIDELITY_HORIZONS = ["k1", "k5", "k20"] as const;
+
+type FidelityReading = {
+  /** Headline score (nearest available horizon) shown in the cell. */
+  headline: number;
+  /** Label of the headline horizon, e.g. "k1". */
+  headlineLabel: string;
+  /** Every finite horizon score, for the breakdown tooltip. */
+  horizons: { label: string; value: number }[];
+};
+
+/**
+ * Extract a row's model-fidelity scores, or null when none are usable. The
+ * headline is the nearest available horizon (k1 → k5 → k20); the full set feeds
+ * a breakdown tooltip. Returns null for absent/empty/all-NaN fidelity so the
+ * optional column can hide itself when no row carries data.
+ */
+function readModelFidelity(row: LeaderboardRow): FidelityReading | null {
+  const fidelity = row.model_fidelity;
+  if (!fidelity || typeof fidelity !== "object") return null;
+  const source = fidelity as Record<string, unknown>;
+  const horizons: { label: string; value: number }[] = [];
+  for (const label of FIDELITY_HORIZONS) {
+    const value = toFiniteNumber(source[label]);
+    if (value !== null) horizons.push({ label, value });
+  }
+  if (horizons.length === 0) return null;
+  const [headline] = horizons;
+  return { headline: headline.value, headlineLabel: headline.label, horizons };
+}
+
 export default function LeaderboardPage() {
   const router = useRouter();
   const [track, setTrack] = useState<Track>("test");
+  // Ordered selection of run ids for the side-by-side comparison view, capped
+  // at MAX_COMPARE. Kept as an array so /compare columns honour click order.
+  const [selected, setSelected] = useState<string[]>([]);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["leaderboard", track],
     queryFn: () => fetchLeaderboard(track)
   });
 
   const rows = useMemo(() => data ?? [], [data]);
+
+  const toggleSelected = useCallback((runId: string) => {
+    setSelected((prev) => {
+      if (prev.includes(runId)) {
+        return prev.filter((id) => id !== runId);
+      }
+      // Ignore selections beyond the cap (the checkbox is disabled too).
+      if (prev.length >= MAX_COMPARE) {
+        return prev;
+      }
+      return [...prev, runId];
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelected([]), []);
+
+  // Drop selections that are no longer on the visible track without an effect:
+  // the action bar only links to ids that still exist in `rows`.
+  const selectedOnTrack = useMemo(() => {
+    const present = new Set(rows.map((r) => r.run_id));
+    return selected.filter((id) => present.has(id));
+  }, [rows, selected]);
 
   const successValues = rows
     .map((row) => toFiniteNumber(row.success_rate))
@@ -162,11 +222,83 @@ export default function LeaderboardPage() {
         {!isLoading && !isError && rows.length > 0 ? (
           <>
             <LeaderboardChart data={rows} />
-            <RankingTable rows={rows} onOpen={(id) => router.push(`/runs/${id}`)} />
+            <RankingTable
+              rows={rows}
+              onOpen={(id) => router.push(`/runs/${id}`)}
+              selected={selected}
+              onToggleSelected={toggleSelected}
+            />
           </>
         ) : null}
       </div>
+
+      <CompareBar selected={selectedOnTrack} onClear={clearSelection} />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sticky/floating action bar that appears once one or more runs are selected.
+ * Links to /compare?runs=id1,id2,... and is fully keyboard-accessible. The
+ * "Compare" CTA is disabled until at least two runs are chosen.
+ */
+function CompareBar({
+  selected,
+  onClear
+}: {
+  selected: string[];
+  onClear: () => void;
+}) {
+  const count = selected.length;
+  const canCompare = count >= 2;
+  return (
+    <AnimatePresence>
+      {count > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 24 }}
+          transition={{ duration: 0.18 }}
+          className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4"
+        >
+          <div
+            role="region"
+            aria-label="Run comparison selection"
+            className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-full border border-border-strong bg-surface/95 px-3 py-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-surface/80"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+              <GitCompareArrows className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <p className="min-w-0 flex-1 font-mono text-xs text-fg" aria-live="polite">
+              <span className="font-semibold text-fg">{count}</span>{" "}
+              {count === 1 ? "run" : "runs"} selected
+              <span className="ml-1 hidden text-fg-subtle sm:inline">· max {MAX_COMPARE}</span>
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              leftIcon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
+            >
+              Clear
+            </Button>
+            {canCompare ? (
+              <Link href={compareHref(selected)}>
+                <Button variant="primary" size="sm">
+                  Compare {count} runs
+                </Button>
+              </Link>
+            ) : (
+              <Button variant="primary" size="sm" disabled aria-disabled="true">
+                Compare {count} runs
+              </Button>
+            )}
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
@@ -174,11 +306,20 @@ export default function LeaderboardPage() {
 
 function RankingTable({
   rows,
-  onOpen
+  onOpen,
+  selected,
+  onToggleSelected
 }: {
   rows: LeaderboardRow[];
   onOpen: (runId: string) => void;
+  selected: string[];
+  onToggleSelected: (runId: string) => void;
 }) {
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const atCap = selected.length >= MAX_COMPARE;
+  // Only mount the fidelity column when at least one visible row carries a
+  // usable model_fidelity score, so tracks without it don't show a "--" column.
+  const showFidelity = useMemo(() => rows.some((row) => readModelFidelity(row) !== null), [rows]);
   return (
     <Reveal>
       <SectionHeader
@@ -188,9 +329,12 @@ function RankingTable({
         className="mb-5"
       />
       <TableContainer className="shadow-sm">
-        <Table className="min-w-[760px]">
+        <Table className="min-w-[800px]">
           <THead sticky>
             <TR>
+              <TH className="w-10">
+                <span className="sr-only">Select for comparison</span>
+              </TH>
               <TH className="w-16">Rank</TH>
               <TH>Run</TH>
               <TH>Env</TH>
@@ -198,6 +342,7 @@ function RankingTable({
               <TH className="min-w-[180px]">Success rate</TH>
               <TH className="text-right">Return</TH>
               <TH className="text-right">Cost (ms/step)</TH>
+              {showFidelity ? <TH className="text-right">Fidelity</TH> : null}
               <TH className="w-10 text-right">
                 <span className="sr-only">Open run</span>
               </TH>
@@ -208,6 +353,9 @@ function RankingTable({
               const rank = index + 1;
               const success = toFiniteNumber(row.success_rate);
               const ci = readCiHalfWidth(row);
+              const fidelity = readModelFidelity(row);
+              const isSelected = selectedSet.has(row.run_id);
+              const selectDisabled = !isSelected && atCap;
               const tone =
                 success === null
                   ? "accent"
@@ -232,6 +380,14 @@ function RankingTable({
                   }}
                   className="group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
+                  <TD className="w-10">
+                    <SelectCell
+                      runId={row.run_id}
+                      checked={isSelected}
+                      disabled={selectDisabled}
+                      onToggle={onToggleSelected}
+                    />
+                  </TD>
                   <TD>
                     {rank <= 3 ? (
                       <Tooltip content={`Rank ${rank} of ${rows.length}`}>
@@ -271,6 +427,26 @@ function RankingTable({
                   <TD className="text-right font-mono text-sm tabular-nums text-fg-muted">
                     {formatMetric(row.planning_cost_ms_per_step, 2)}
                   </TD>
+                  {showFidelity ? (
+                    <TD className="text-right">
+                      {fidelity ? (
+                        <Tooltip
+                          content={fidelity.horizons
+                            .map((h) => `${h.label} ${formatMetric(h.value, 2)}`)
+                            .join(" · ")}
+                        >
+                          <span className="inline-flex items-baseline gap-1 font-mono text-sm tabular-nums">
+                            <span className="text-[0.65rem] tracking-wide text-fg-subtle">
+                              {fidelity.headlineLabel}
+                            </span>
+                            {formatMetric(fidelity.headline, 2)}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <span className="font-mono text-xs text-fg-subtle">--</span>
+                      )}
+                    </TD>
+                  ) : null}
                   <TD className="text-right">
                     <ArrowUpRight
                       className="ml-auto h-4 w-4 text-fg-subtle transition-colors group-hover:text-accent"
@@ -284,6 +460,48 @@ function RankingTable({
         </Table>
       </TableContainer>
     </Reveal>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Per-row comparison toggle. Rendered as a real <input type="checkbox"> for
+ * keyboard + screen-reader support. All pointer/keyboard events stop
+ * propagation so toggling never triggers the surrounding row's link navigation
+ * (Enter/Space on the row open the run; here they toggle selection instead).
+ */
+function SelectCell({
+  runId,
+  checked,
+  disabled,
+  onToggle
+}: {
+  runId: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (runId: string) => void;
+}) {
+  return (
+    <label
+      className="inline-flex cursor-pointer items-center justify-center p-1"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        aria-label={
+          disabled
+            ? `Selection full (max ${MAX_COMPARE} runs)`
+            : `${checked ? "Remove" : "Add"} run ${runId} ${checked ? "from" : "to"} comparison`
+        }
+        onChange={() => onToggle(runId)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-4 w-4 cursor-pointer rounded border-border-strong text-accent accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50"
+      />
+    </label>
   );
 }
 

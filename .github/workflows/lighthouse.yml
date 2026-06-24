@@ -1,0 +1,65 @@
+name: Lighthouse CI
+
+# Audits Core Web Vitals + accessibility/best-practices/SEO on the key web
+# surfaces. Budgets start as warnings (see web/lighthouserc.json) so this
+# surfaces regressions without blocking merges until the numbers settle.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/lighthouse.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/lighthouse.yml"
+
+concurrency:
+  group: lighthouse-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Build Next.js app
+        env:
+          # No live backend in this job — pages render their loading/empty
+          # states, which is exactly what we want to audit for the shell's
+          # performance + accessibility budgets.
+          NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000
+        run: npm run build
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.14.x
+
+      - name: Run Lighthouse CI
+        env:
+          NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000
+        # autorun reads web/lighthouserc.json: it boots `next start`, collects
+        # runs against the key routes, asserts the budgets, then uploads the
+        # report to temporary public storage.
+        run: lhci autorun --config=./lighthouserc.json
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: web/.lighthouseci
+          if-no-files-found: ignore

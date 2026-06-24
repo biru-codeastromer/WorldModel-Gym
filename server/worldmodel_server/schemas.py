@@ -53,3 +53,10 @@ class LeaderboardRow(BaseModel):
     mean_return: float
     planning_cost_ms_per_step: float
     created_at: datetime
+    # Optional ranking extras lifted out of the run's metrics blob. ``None`` for
+    # runs whose metrics predate (or omit) these fields, so existing rows keep
+    # their original 8-field shape. ``success_rate_ci`` is an ordered
+    # ``[low, high]`` pair; ``model_fidelity`` maps rollout horizons (k1/k5/k20)
+    # to finite fidelity scores.
+    success_rate_ci: list[float] | None = None
+    model_fidelity: dict[str, float] | None = None

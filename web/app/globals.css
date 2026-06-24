@@ -29,25 +29,25 @@
   /* Text ----------------------------------------------------------------- */
   --fg: #1d1a24;            /* primary ink */
   --fg-muted: #5f5867;      /* secondary */
-  --fg-subtle: #8a8390;     /* tertiary / placeholders */
+  --fg-subtle: #6f6976;     /* tertiary / placeholders — AA (>=4.5:1 on surfaces) */
 
   /* Accent --------------------------------------------------------------- */
-  --accent: #3d68dc;
+  --accent: #3760d0;        /* AA as text on paper + on accent-soft (>=4.5:1) */
   --accent-hover: #2c56d1;
   --accent-fg: #fffdfa;     /* text on accent */
   --accent-soft: #e2e9ff;   /* tinted accent surface */
-  --accent-ring: rgba(61, 104, 220, 0.45);
+  --accent-ring: rgba(55, 96, 208, 0.45);
 
   /* Semantic ------------------------------------------------------------- */
-  --success: #2f8f5b;
+  --success: #277548;       /* AA as text on paper (>=4.5:1) */
   --success-soft: #dcf0e4;
-  --warning: #b8791f;
+  --warning: #8f5f12;       /* AA as text on paper (>=4.5:1) */
   --warning-soft: #f6e7cf;
-  --danger: #c4403f;
-  --danger-soft: #f7dedd;
+  --danger: #b83a39;        /* AA as text on paper + on danger-soft (>=4.4:1) */
+  --danger-soft: #fce3e2;
 
   /* Focus ring ----------------------------------------------------------- */
-  --ring: #3d68dc;
+  --ring: #3760d0;
 
   /* Elevation ------------------------------------------------------------ */
   --shadow-sm: 0 1px 2px rgba(33, 24, 43, 0.06);
@@ -97,7 +97,7 @@
 
   --fg: #f3eef6;
   --fg-muted: #a59faf;
-  --fg-subtle: #75707f;
+  --fg-subtle: #908a98;     /* AA (>=4.5:1 on dark surfaces) */
 
   --accent: #6e8ff0;
   --accent-hover: #87a1f4;

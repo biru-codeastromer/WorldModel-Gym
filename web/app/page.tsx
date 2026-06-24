@@ -285,11 +285,13 @@ export default function HomePage() {
                 Research benchmark platform
               </Badge>
             </Reveal>
-            <Reveal direction="up" delay={0.06}>
-              <h1 className="mt-5 font-serif text-4xl font-medium leading-[1.04] tracking-[-0.02em] text-fg sm:text-5xl md:text-6xl">
-                Benchmark world-model agents in one public surface.
-              </h1>
-            </Reveal>
+            {/* LCP element: render the hero heading immediately at its final
+                state (no opacity-gated entrance) so there is zero
+                flash-of-invisible above-the-fold text and a fast LCP. Secondary
+                hero elements keep their staggered reveal. */}
+            <h1 className="mt-5 font-serif text-4xl font-medium leading-[1.04] tracking-[-0.02em] text-fg sm:text-5xl md:text-6xl">
+              Benchmark world-model agents in one public surface.
+            </h1>
             <Reveal direction="up" delay={0.12}>
               <p className="mt-5 max-w-lg font-mono text-base leading-7 text-fg-muted">
                 WorldModel Gym turns environments, uploads, traces, and

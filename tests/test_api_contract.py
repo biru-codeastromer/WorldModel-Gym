@@ -352,6 +352,65 @@ def test_leaderboard_no_conditional_returns_200_list(server_modules):
     assert "ETag" in resp.headers
 
 
+def test_leaderboard_surfaces_ci_and_model_fidelity(server_modules):
+    """The leaderboard row lifts success_rate_ci + model_fidelity out of the
+    uploaded metrics blob; a run that omits them keeps them null (the optional,
+    back-compatible contract)."""
+    modules = server_modules()
+    client, secret = _writer_client(modules)
+    try:
+        # A run whose metrics carry the ranking extras.
+        client.post(
+            "/api/runs",
+            json={"id": "ci_run", "env": "memory_maze", "agent": "a", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        client.post(
+            "/api/runs/ci_run/upload",
+            headers={"x-api-key": secret},
+            files={
+                "metrics_file": (
+                    "metrics.json",
+                    json.dumps(
+                        {
+                            "success_rate": 0.8,
+                            "mean_return": 0.7,
+                            "success_rate_ci": [0.72, 0.88],
+                            "model_fidelity": {"k1": 0.95, "k5": 0.81, "k20": 0.6},
+                        }
+                    ),
+                    "application/json",
+                )
+            },
+        )
+        # A run that omits them entirely (lower success_rate so it ranks below).
+        client.post(
+            "/api/runs",
+            json={"id": "plain_run", "env": "memory_maze", "agent": "a", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        client.post(
+            "/api/runs/plain_run/upload",
+            headers={"x-api-key": secret},
+            files=_metrics_files(0.5, 0.4),
+        )
+
+        resp = client.get("/api/leaderboard?track=test")
+    finally:
+        client.__exit__(None, None, None)
+
+    assert resp.status_code == 200
+    by_id = {r["run_id"]: r for r in resp.json()}
+
+    enriched = by_id["ci_run"]
+    assert enriched["success_rate_ci"] == [0.72, 0.88]
+    assert enriched["model_fidelity"] == {"k1": 0.95, "k5": 0.81, "k20": 0.6}
+
+    plain = by_id["plain_run"]
+    assert plain["success_rate_ci"] is None
+    assert plain["model_fidelity"] is None
+
+
 # --------------------------------------------------------------------------- #
 # Metrics validation on upload
 # --------------------------------------------------------------------------- #
