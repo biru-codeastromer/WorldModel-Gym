@@ -7,13 +7,18 @@ services:
     plan: free
     healthCheckPath: /healthz
     autoDeploy: true
+    # Decouple schema migrations from request-serving startup: run the migration
+    # once as part of the deploy (before traffic shifts) rather than on every
+    # process boot. This keeps horizontally-scaled API replicas from racing to
+    # migrate, and lets WMG_AUTO_MIGRATE stay false at runtime.
+    preDeployCommand: python -m worldmodel_server.cli migrate
     envVars:
       - key: WMG_ENV
         value: production
       # WMG_DB_URL is set manually in the Render dashboard
       # (contains credentials — not stored in git)
       - key: WMG_AUTO_MIGRATE
-        value: "true"
+        value: "false"
       # Durable, S3-compatible storage is REQUIRED in production. The container
       # filesystem is ephemeral, so local storage would silently lose every
       # uploaded artifact on each restart/redeploy. The S3 credentials below are
@@ -52,3 +57,57 @@ services:
       # Remove after a durable production API key is in place.
       - key: WMG_BOOTSTRAP_API_KEY
         generateValue: true
+      # Managed Redis connection — powers the distributed rate limiter and the
+      # async job queue. Pulled from the keyvalue instance defined below.
+      - key: WMG_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: worldmodel-gym-redis
+          property: connectionString
+
+  # Background worker that drains the RQ job queue and runs evaluations. Uses
+  # the torch-bearing worker image; never serves HTTP traffic.
+  - type: worker
+    name: worldmodel-gym-worker
+    env: docker
+    dockerfilePath: ./docker/worker.Dockerfile
+    dockerContext: .
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: WMG_ENV
+        value: production
+      # WMG_DB_URL is set manually in the Render dashboard (shared with the API).
+      - key: WMG_QUEUE_ENABLED
+        value: "true"
+      # The worker writes eval artifacts to the same durable S3 store.
+      - key: WMG_STORAGE_BACKEND
+        value: s3
+      - key: WMG_S3_BUCKET
+        sync: false
+      - key: WMG_S3_REGION
+        sync: false
+      - key: WMG_S3_ENDPOINT_URL
+        sync: false
+      - key: WMG_S3_ACCESS_KEY_ID
+        sync: false
+      - key: WMG_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: WMG_LOG_JSON
+        value: "true"
+      - key: WMG_LOG_LEVEL
+        value: "INFO"
+      - key: WMG_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: worldmodel-gym-redis
+          property: connectionString
+
+  # Managed Redis (Render "keyvalue") used as the RQ broker and the shared rate
+  # limiter backend. `noeviction` keeps queued jobs from being dropped under
+  # memory pressure.
+  - type: keyvalue
+    name: worldmodel-gym-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []

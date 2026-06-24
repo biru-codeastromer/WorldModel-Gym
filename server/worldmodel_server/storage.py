@@ -74,6 +74,23 @@ def _retry_read(operation: Callable[[], _T], *, description: str) -> _T:
     raise last_exc
 
 
+def make_artifact_key(run_id: str, filename: str) -> str:
+    """Build the backend-agnostic artifact key persisted in the DB.
+
+    The key is always ``"<run_id>/<filename>"`` -- a relative, portable
+    identifier with no host path or storage backend specifics baked in, so a
+    ``RunEntry`` row stays valid if the storage root moves or the deployment
+    switches between the local and S3 backends. Concrete locations (absolute
+    filesystem paths, S3 object keys with a prefix) are only ever resolved from
+    this key at read/write time inside the store implementations.
+    """
+    safe_run_id = validate_run_id(run_id)
+    safe_filename = Path(filename).name
+    if not safe_filename or safe_filename in {".", ".."}:
+        raise ValueError("filename must be a plain, non-empty name")
+    return f"{safe_run_id}/{safe_filename}"
+
+
 class ArtifactStore:
     backend_name = "local"
 
@@ -109,15 +126,37 @@ class LocalArtifactStore(ArtifactStore):
         return {"backend": self.backend_name, "location": str(self.root.resolve())}
 
     def artifact_key(self, run_id: str, filename: str) -> str:
-        return str(run_dir(run_id) / filename)
+        return make_artifact_key(run_id, filename)
+
+    def resolve_path(self, key: str) -> Path:
+        """Resolve a persisted key to a concrete filesystem path.
+
+        New-style keys are backend-agnostic ("run_id/filename") and are resolved
+        under the current storage root. Legacy rows stored an absolute host path
+        directly; those are tolerated by passing an absolute key straight
+        through. Either way the resolved path is confined to the storage root.
+        """
+        candidate = Path(key)
+        if candidate.is_absolute():
+            # Legacy absolute path written by an older build. Honor it as-is so
+            # existing rows keep reading, but still confine it to the storage
+            # root to avoid path traversal via a hostile DB value.
+            resolved = candidate.resolve()
+        else:
+            resolved = (self.root / key).resolve()
+        root = self.root.resolve()
+        if root != resolved and root not in resolved.parents:
+            raise ValueError("artifact key resolved outside storage root")
+        return resolved
 
     def save_artifact(self, run_id: str, filename: str, data: bytes) -> str:
-        path = run_dir(run_id) / filename
+        key = self.artifact_key(run_id, filename)
+        path = run_dir(run_id) / Path(filename).name
         path.write_bytes(data)
-        return str(path)
+        return key
 
     def read_artifact(self, key: str) -> bytes:
-        return Path(key).read_bytes()
+        return self.resolve_path(key).read_bytes()
 
     def write_probe(self) -> dict[str, object]:
         self.ensure_ready()
@@ -169,16 +208,27 @@ class S3ArtifactStore(ArtifactStore):
         return {"backend": self.backend_name, "location": f"s3://{self.bucket}{prefix}"}
 
     def artifact_key(self, run_id: str, filename: str) -> str:
-        safe_run_id = validate_run_id(run_id)
-        parts = [self.prefix, safe_run_id, filename]
-        return "/".join(part for part in parts if part)
+        # Persist a backend-agnostic key ("run_id/filename"); the bucket prefix
+        # is a deployment detail applied only when talking to S3.
+        return make_artifact_key(run_id, filename)
+
+    def _object_key(self, key: str) -> str:
+        """Map a persisted agnostic key to the concrete S3 object key.
+
+        Prepends the configured bucket prefix at I/O time. Legacy rows that
+        already include the prefix are tolerated by not double-prefixing.
+        """
+        normalized = key.lstrip("/")
+        if self.prefix and not normalized.startswith(f"{self.prefix}/"):
+            return f"{self.prefix}/{normalized}"
+        return normalized
 
     def save_artifact(self, run_id: str, filename: str, data: bytes) -> str:
         key = self.artifact_key(run_id, filename)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
         self.client.put_object(
             Bucket=self.bucket,
-            Key=key,
+            Key=self._object_key(key),
             Body=data,
             ContentType=content_type,
         )
@@ -186,7 +236,7 @@ class S3ArtifactStore(ArtifactStore):
 
     def read_artifact(self, key: str) -> bytes:
         try:
-            obj = self.client.get_object(Bucket=self.bucket, Key=key)
+            obj = self.client.get_object(Bucket=self.bucket, Key=self._object_key(key))
         except (BotoCoreError, ClientError) as exc:
             raise FileNotFoundError(key) from exc
         return obj["Body"].read()

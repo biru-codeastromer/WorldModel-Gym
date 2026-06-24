@@ -1,10 +1,46 @@
 from __future__ import annotations
 
+import json
+import sys
+from importlib import import_module, reload
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from worldmodel_server.config import Settings
 from worldmodel_server.storage import run_dir, validate_run_id
+
+_MODULE_ORDER = [
+    "worldmodel_server.config",
+    "worldmodel_server.db",
+    "worldmodel_server.models",
+    "worldmodel_server.storage",
+    "worldmodel_server.auth",
+    "worldmodel_server.rate_limit",
+    "worldmodel_server.request_logging",
+    "worldmodel_server.seed",
+    "worldmodel_server.migrations",
+    "worldmodel_server.main",
+]
+
+
+def _load_server_modules(monkeypatch, tmp_path):
+    monkeypatch.setenv("WMG_DB_URL", f"sqlite:///{tmp_path / 'test.db'}")
+    monkeypatch.setenv("WMG_STORAGE_DIR", str(tmp_path / "storage"))
+    monkeypatch.setenv("WMG_UPLOAD_TOKEN", "test-token")
+    monkeypatch.setenv("WMG_AUTO_MIGRATE", "true")
+    monkeypatch.setenv("WMG_ENABLE_METRICS", "false")
+    monkeypatch.setenv("WMG_SEED_DEMO_DATA", "false")
+    monkeypatch.setenv("WMG_PUBLIC_READ_RATE_LIMIT_PER_MINUTE", "240")
+    monkeypatch.setenv("WMG_AUTH_WRITE_RATE_LIMIT_PER_MINUTE", "120")
+
+    modules = {}
+    for name in _MODULE_ORDER:
+        if name in sys.modules:
+            modules[name] = reload(sys.modules[name])
+        else:
+            modules[name] = import_module(name)
+    return modules
 
 
 def test_validate_run_id_rejects_path_traversal():
@@ -63,3 +99,61 @@ def test_default_dev_token_allowed_in_development(monkeypatch):
 
     settings = Settings()
     settings.validate()  # should not raise
+
+
+def test_upload_persists_backend_agnostic_keys_and_reads_back(tmp_path, monkeypatch):
+    modules = _load_server_modules(monkeypatch, tmp_path)
+    app = modules["worldmodel_server.main"].app
+    create_api_key = modules["worldmodel_server.auth"].create_api_key
+    session_local = modules["worldmodel_server.db"].SessionLocal
+    run_model = modules["worldmodel_server.models"].RunEntry
+
+    run_id = "keytest_run"
+    storage_dir = tmp_path / "storage"
+
+    with TestClient(app) as client:
+        with session_local() as session:
+            _, secret = create_api_key(session, name="writer", scopes=["runs:write"])
+
+        client.post(
+            "/api/runs",
+            json={"id": run_id, "env": "memory_maze", "agent": "random", "track": "test"},
+            headers={"x-api-key": secret},
+        )
+        upload = client.post(
+            f"/api/runs/{run_id}/upload",
+            headers={"x-api-key": secret},
+            files={
+                "metrics_file": (
+                    "metrics.json",
+                    json.dumps({"success_rate": 0.5, "mean_return": 0.5}),
+                    "application/json",
+                ),
+                "trace_file": ("trace.jsonl", b'{"step": 0}\n', "application/x-ndjson"),
+                "config_file": ("config.yaml", b"env: memory_maze\n", "text/yaml"),
+            },
+        )
+        assert upload.status_code == 200
+
+        # The persisted columns must be relative, backend-agnostic keys -- never
+        # absolute host paths -- so the row is portable across hosts and to S3.
+        with session_local() as session:
+            row = session.get(run_model, run_id)
+            assert row.trace_path == f"{run_id}/trace.jsonl"
+            assert row.config_path == f"{run_id}/config.yaml"
+            assert not Path(row.trace_path).is_absolute()
+            assert not Path(row.config_path).is_absolute()
+            assert str(storage_dir) not in row.trace_path
+            assert str(storage_dir) not in row.config_path
+
+        # Read paths still resolve the agnostic key through the store.
+        trace = client.get(f"/api/runs/{run_id}/trace")
+        config = client.get(f"/api/runs/{run_id}/config")
+        metrics = client.get(f"/api/runs/{run_id}/metrics")
+
+    assert trace.status_code == 200
+    assert trace.content == b'{"step": 0}\n'
+    assert config.status_code == 200
+    assert config.content == b"env: memory_maze\n"
+    assert metrics.status_code == 200
+    assert metrics.json()["success_rate"] == 0.5

@@ -1,0 +1,32 @@
+# Keep the Docker build context small and free of host-only / generated files.
+.git
+.gitignore
+
+# Node / Next.js
+node_modules
+**/node_modules
+.next
+web/.next
+
+# Python virtualenvs & caches
+.venv
+venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+
+# Local runtime state / databases / scratch
+runs
+.tmp
+*.db
+
+# Docs & paper (not needed to build/run images)
+paper
+docs
+
+# Editor / OS noise
+.DS_Store
+*.log

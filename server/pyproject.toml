@@ -16,6 +16,8 @@ dependencies = [
   "sqlalchemy>=2.0.36",
   "pydantic>=2.10.3",
   "python-multipart>=0.0.20",
+  "redis>=5",
+  "rq>=1.16",
 ]
 
 [project.scripts]

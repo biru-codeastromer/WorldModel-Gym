@@ -11,6 +11,14 @@ services:
     ports:
       - "5432:5432"
 
+  redis:
+    image: redis:7-alpine
+    container_name: wmg-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
   server:
     build:
       context: .
@@ -23,13 +31,33 @@ services:
       - WMG_AUTO_MIGRATE=true
       - WMG_STORAGE_DIR=/app/server/storage
       - WMG_ENABLE_METRICS=true
+      - WMG_REDIS_URL=redis://redis:6379/0
+      - WMG_QUEUE_ENABLED=true
     volumes:
       - ./server/storage:/app/server/storage
       - ./runs:/app/runs
     depends_on:
       - postgres
+      - redis
     ports:
       - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: wmg-worker
+    environment:
+      - WMG_DB_URL=postgresql+psycopg://postgres:postgres@postgres:5432/worldmodel_gym
+      - WMG_STORAGE_DIR=/app/server/storage
+      - WMG_REDIS_URL=redis://redis:6379/0
+      - WMG_QUEUE_ENABLED=true
+    volumes:
+      - ./server/storage:/app/server/storage
+      - ./runs:/app/runs
+    depends_on:
+      - postgres
+      - redis
 
   web:
     build:
@@ -46,3 +74,4 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:

@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Emit a self-contained server bundle (.next/standalone) so the Docker image
+  // can ship only the traced runtime files instead of the full node_modules.
+  output: "standalone",
   poweredByHeader: false,
   experimental: {
     typedRoutes: false

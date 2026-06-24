@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
@@ -21,6 +21,7 @@ from worldmodel_server.migrations import run_migrations
 from worldmodel_server.models import RunEntry
 from worldmodel_server.rate_limit import rate_limiter
 from worldmodel_server.request_logging import configure_logging, log_request_event, log_system_event
+from worldmodel_server.runner import enqueue_run
 from worldmodel_server.schemas import LeaderboardRow, RunCreate, RunResponse
 from worldmodel_server.seed import seed_demo_runs
 from worldmodel_server.storage import (
@@ -52,6 +53,55 @@ except ImportError:  # pragma: no cover
     Instrumentator = None
 
 
+class _TTLCache:
+    """Tiny thread-safe TTL cache for public GET responses.
+
+    Entries are keyed by an opaque string and carry a monotonic data-version
+    stamp. ``bump_version`` invalidates every cached entry at once (used when an
+    upload/seed mutates runs) without needing to enumerate keys. A per-entry TTL
+    bounds staleness even without an explicit bump. TTL=0 disables caching.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._store: dict[str, tuple[float, int, object]] = {}
+        self._version = 0
+
+    def bump_version(self) -> None:
+        with self._lock:
+            self._version += 1
+            self._store.clear()
+
+    def get(self, key: str, ttl_seconds: int):
+        if ttl_seconds <= 0:
+            return None
+        now = time.monotonic()
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            expires_at, version, value = entry
+            if version != self._version or now >= expires_at:
+                self._store.pop(key, None)
+                return None
+            return value
+
+    def set(self, key: str, value: object, ttl_seconds: int) -> None:
+        if ttl_seconds <= 0:
+            return
+        with self._lock:
+            self._store[key] = (time.monotonic() + ttl_seconds, self._version, value)
+
+
+_response_cache = _TTLCache()
+
+
+def _cache_control_header(ttl_seconds: int) -> str:
+    if ttl_seconds <= 0:
+        return "no-store"
+    return f"public, max-age={ttl_seconds}"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     configure_logging()
@@ -80,6 +130,8 @@ async def lifespan(_app: FastAPI):
                 )
             elif settings.seed_demo_data:
                 seeded_runs = seed_demo_runs(session)
+                if seeded_runs:
+                    _response_cache.bump_version()
         log_system_event(
             "startup_complete",
             **startup_context,
@@ -331,11 +383,16 @@ async def upload_run_artifacts(
         raise HTTPException(status_code=500, detail="failed to record run metadata") from exc
     session.refresh(item)
 
+    # An upload mutates leaderboard data; invalidate cached public GETs so the
+    # new run shows up immediately rather than after the TTL elapses.
+    _response_cache.bump_version()
+
     return _to_response(item)
 
 
 @app.get("/api/leaderboard", response_model=list[LeaderboardRow])
 def leaderboard(
+    response: Response,
     track: str = Query(default="test"),
     env: str | None = Query(default=None),
     agent: str | None = Query(default=None),
@@ -344,6 +401,13 @@ def leaderboard(
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
 ):
+    ttl = settings.response_cache_ttl_seconds
+    response.headers["Cache-Control"] = _cache_control_header(ttl)
+    cache_key = f"leaderboard:{track}:{env}:{agent}:{include_demo}:{limit}:{offset}"
+    cached = _response_cache.get(cache_key, ttl)
+    if cached is not None:
+        return cached
+
     q = select(RunEntry).where(RunEntry.status == "uploaded", RunEntry.track == track)
     if env:
         q = q.where(RunEntry.env == env)
@@ -384,15 +448,22 @@ def leaderboard(
                 created_at=row.created_at,
             )
         )
+    _response_cache.set(cache_key, out, ttl)
     return out
 
 
 @app.get("/api/tasks")
-def tasks(request: Request):
+def tasks(request: Request, response: Response):
+    ttl = settings.response_cache_ttl_seconds
+    response.headers["Cache-Control"] = _cache_control_header(ttl)
+    cached = _response_cache.get("tasks", ttl)
+    if cached is not None:
+        return cached
+
     try:
         from worldmodel_gym.envs.registry import list_tasks
 
-        return {"tasks": list_tasks()}
+        payload = {"tasks": list_tasks()}
     except Exception as exc:
         log_system_event(
             "tasks_registry_unavailable",
@@ -400,13 +471,15 @@ def tasks(request: Request):
             request_id=_request_id(request),
             error=str(exc),
         )
-        return {
+        payload = {
             "tasks": [
                 {"id": "memory_maze", "description": "Grid POMDP with key-door dependency"},
                 {"id": "switch_quest", "description": "Subgoal chaining with hidden sequence"},
                 {"id": "craft_lite", "description": "Lightweight crafting and sparse objectives"},
             ]
         }
+    _response_cache.set("tasks", payload, ttl)
+    return payload
 
 
 @app.get("/api/runs/{run_id}", response_model=RunResponse)
@@ -475,21 +548,42 @@ def readyz(session: Session = Depends(get_session)):
     return JSONResponse(status_code=503, content=payload)
 
 
-@app.post("/api/runs/{run_id}/trigger")
+@app.post("/api/runs/{run_id}/trigger", status_code=202, response_model=RunResponse)
 def trigger_demo_run(
+    response: Response,
     run_id: str,
+    session: Session = Depends(get_session),
     _principal: AuthenticatedPrincipal = Depends(_require_admin_access),
 ):
-    # Server-side run orchestration does not exist yet. Returning "accepted" here
-    # would falsely imply the platform executed the run, so fail honestly with 501
-    # until a real runner/queue is wired up.
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "Server-side run execution is not implemented. Run evaluations locally "
-            "with scripts/demo_run.py and upload the resulting artifacts."
-        ),
+    # The async job tier is OPTIONAL. Without Redis + WMG_QUEUE_ENABLED there is
+    # no runner to execute the job, so we fail honestly with 501 (unchanged from
+    # the prior behavior) rather than implying the platform ran anything.
+    if not settings.queue_active:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Server-side run execution is not enabled. Set WMG_REDIS_URL and "
+                "WMG_QUEUE_ENABLED to run evaluations on the queue, or run them "
+                "locally with scripts/demo_run.py and upload the artifacts."
+            ),
+        )
+
+    item = _get_run_or_404(session, run_id)
+
+    enqueued = enqueue_run(
+        run_id=item.id,
+        agent=item.agent,
+        env=item.env,
+        track=item.track,
     )
+    if enqueued:
+        item.status = "queued"
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+
+    response.status_code = 202
+    return _to_response(item)
 
 
 def _parse_metrics(raw: str) -> dict:
@@ -531,10 +625,10 @@ def _best_effort_delete(keys: list[str], *, request_id: str | None = None) -> No
     for key in keys:
         try:
             if isinstance(store, LocalArtifactStore):
-                Path(key).unlink(missing_ok=True)
+                store.resolve_path(key).unlink(missing_ok=True)
             elif isinstance(store, S3ArtifactStore):
-                store.client.delete_object(Bucket=store.bucket, Key=key)
-        except (OSError, BotoCoreError, ClientError) as exc:
+                store.client.delete_object(Bucket=store.bucket, Key=store._object_key(key))
+        except (OSError, ValueError, BotoCoreError, ClientError) as exc:
             log_system_event(
                 "upload_artifact_cleanup_failed",
                 level=logging.WARNING,

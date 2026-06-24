@@ -67,9 +67,27 @@ class Settings:
         self.log_level = os.getenv("WMG_LOG_LEVEL", "INFO").upper()
         self.bootstrap_api_key = os.getenv("WMG_BOOTSTRAP_API_KEY", "")
 
+        # --- Redis / async job queue / response caching (all OPTIONAL) ---
+        # When WMG_REDIS_URL is empty, Redis is disabled: the rate limiter uses
+        # its in-process fallback and the job queue is unavailable regardless of
+        # WMG_QUEUE_ENABLED. Both an uppercase attribute (read by rate_limit.py)
+        # and a lowercase alias (used internally) are exposed for the same value.
+        self.redis_url = os.getenv("WMG_REDIS_URL", "")
+        self.WMG_REDIS_URL = self.redis_url
+        self.queue_enabled = _as_bool(os.getenv("WMG_QUEUE_ENABLED"), False)
+        self.queue_name = os.getenv("WMG_QUEUE_NAME", "worldmodel-runs")
+        # TTL (seconds) for the in-process cache on public GETs (leaderboard,
+        # tasks). 0 disables caching entirely.
+        self.response_cache_ttl_seconds = int(os.getenv("WMG_RESPONSE_CACHE_TTL_SECONDS", "10"))
+
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def queue_active(self) -> bool:
+        """True only when the async job queue is both enabled and has Redis."""
+        return bool(self.queue_enabled and self.redis_url)
 
     def validate(self) -> None:
         if self.storage_backend not in {"local", "s3"}:

@@ -136,3 +136,81 @@ def test_ranking_columns_backfilled_from_metrics_json(tmp_path, monkeypatch):
     # Malformed / missing JSON falls back to the 0.0 defaults without error.
     assert result["malformed"] == (0.0, 0.0)
     assert result["missing"] == (0.0, 0.0)
+
+
+def test_artifact_paths_normalized_to_agnostic_keys(tmp_path, monkeypatch):
+    db_path = tmp_path / "migration_keys.db"
+    db_url = f"sqlite:///{db_path}"
+    _point_settings_at(monkeypatch, db_url)
+    config = _alembic_config(db_url)
+
+    # Bring schema up to the revision *before* the key-normalization migration.
+    command.upgrade(config, "20260415_01")
+
+    runs = sa.table(
+        "runs",
+        sa.column("id", sa.String),
+        sa.column("env", sa.String),
+        sa.column("agent", sa.String),
+        sa.column("track", sa.String),
+        sa.column("status", sa.String),
+        sa.column("trace_path", sa.Text),
+        sa.column("config_path", sa.Text),
+    )
+    engine = sa.create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.insert(runs),
+                [
+                    {
+                        "id": "legacy_abs",
+                        "env": "memory_maze",
+                        "agent": "a",
+                        "track": "test",
+                        "status": "uploaded",
+                        "trace_path": "/var/data/wmg/legacy_abs/trace.jsonl",
+                        "config_path": "/var/data/wmg/legacy_abs/config.yaml",
+                    },
+                    {
+                        "id": "already_key",
+                        "env": "memory_maze",
+                        "agent": "b",
+                        "track": "test",
+                        "status": "uploaded",
+                        "trace_path": "already_key/trace.jsonl",
+                        "config_path": "already_key/config.yaml",
+                    },
+                    {
+                        "id": "no_artifacts",
+                        "env": "memory_maze",
+                        "agent": "c",
+                        "track": "test",
+                        "status": "created",
+                        "trace_path": "",
+                        "config_path": "",
+                    },
+                ],
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = sa.create_engine(db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(sa.text("SELECT id, trace_path, config_path FROM runs")).fetchall()
+        result = {row[0]: (row[1], row[2]) for row in rows}
+    finally:
+        engine.dispose()
+
+    # Legacy absolute paths are rewritten to backend-agnostic "<run_id>/<basename>".
+    assert result["legacy_abs"] == ("legacy_abs/trace.jsonl", "legacy_abs/config.yaml")
+    # Already-agnostic and empty values are left untouched (idempotent).
+    assert result["already_key"] == ("already_key/trace.jsonl", "already_key/config.yaml")
+    assert result["no_artifacts"] == ("", "")
+
+    # Downgrade/upgrade round-trips cleanly on sqlite.
+    command.downgrade(config, "20260415_01")
+    command.upgrade(config, "head")

@@ -35,6 +35,9 @@ class RunEntry(Base):
     env: Mapped[str] = mapped_column(String(64), index=True)
     agent: Mapped[str] = mapped_column(String(64), index=True)
     track: Mapped[str] = mapped_column(String(32), index=True)
+    # Run lifecycle state machine:
+    #   created -> queued -> running -> completed | failed   (async job tier)
+    # plus "uploaded" for runs whose artifacts were submitted directly.
     status: Mapped[str] = mapped_column(String(32), default="created")
     success_rate: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     mean_return: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)

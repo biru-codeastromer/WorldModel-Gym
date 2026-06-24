@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import select
@@ -29,10 +28,10 @@ def _best_effort_delete(keys: list[str]) -> None:
     for key in keys:
         try:
             if isinstance(store, LocalArtifactStore):
-                Path(key).unlink(missing_ok=True)
+                store.resolve_path(key).unlink(missing_ok=True)
             elif isinstance(store, S3ArtifactStore):
-                store.client.delete_object(Bucket=store.bucket, Key=key)
-        except (OSError, BotoCoreError, ClientError) as exc:
+                store.client.delete_object(Bucket=store.bucket, Key=store._object_key(key))
+        except (OSError, ValueError, BotoCoreError, ClientError) as exc:
             logger.warning("failed to clean up seed artifact %s: %s", key, exc)
 
 

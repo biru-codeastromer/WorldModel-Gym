@@ -25,6 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     seed.add_argument("--force", action="store_true")
     seed.set_defaults(handler=handle_seed_demo_data)
 
+    worker = subparsers.add_parser(
+        "worker",
+        help="Start an RQ worker for the async job queue (requires WMG_REDIS_URL)",
+    )
+    worker.add_argument(
+        "--burst",
+        action="store_true",
+        help="Drain the queue once and exit instead of serving forever",
+    )
+    worker.set_defaults(handler=handle_worker)
+
     return parser
 
 
@@ -58,6 +69,12 @@ def handle_seed_demo_data(args: argparse.Namespace) -> int:
 
     print(f"Seeded {created} demo runs.")
     return 0
+
+
+def handle_worker(args: argparse.Namespace) -> int:
+    from worldmodel_server.worker import run_worker
+
+    return run_worker(burst=args.burst)
 
 
 def main() -> int:
