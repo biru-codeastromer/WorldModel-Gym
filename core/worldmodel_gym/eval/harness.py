@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import tracemalloc
 import uuid
@@ -19,6 +20,8 @@ from worldmodel_gym.eval.continual import (
 from worldmodel_gym.eval.metrics import EpisodeStats, aggregate_episode_stats
 from worldmodel_gym.eval.seeds import TEST_SEEDS, TRAIN_SEEDS
 from worldmodel_gym.trace.schema import EpisodeTrace, RunMetrics
+
+logger = logging.getLogger(__name__)
 
 # Terminal goal event signalled by each environment on genuine task completion.
 GOAL_EVENTS: dict[str, str] = {
@@ -137,11 +140,26 @@ def evaluate_episodes(
         imagined_transitions = 0
         step_compute_ms = 0.0
         reached_goal = False
+        agent_failed = False
         ep_transitions: list[tuple] = []
 
         while not done:
+            # A misbehaving agent must not crash the whole evaluation run: if
+            # act() or observe() raises, terminate THIS episode cleanly, mark it
+            # failed, and move on. We deliberately do not let the exception
+            # propagate past the per-episode loop.
             t0 = time.perf_counter()
-            action = int(agent.act(obs, info))
+            try:
+                action = int(agent.act(obs, info))
+            except Exception:
+                logger.exception(
+                    "agent.act raised on env=%s seed=%s step=%s; marking episode failed",
+                    env_id,
+                    seed,
+                    steps,
+                )
+                agent_failed = True
+                break
             act_ms = (time.perf_counter() - t0) * 1000.0
             step_compute_ms += act_ms
 
@@ -161,7 +179,17 @@ def evaluate_episodes(
                 "next_obs": next_obs,
                 "events": step_events,
             }
-            agent.observe(transition)
+            try:
+                agent.observe(transition)
+            except Exception:
+                logger.exception(
+                    "agent.observe raised on env=%s seed=%s step=%s; marking episode failed",
+                    env_id,
+                    seed,
+                    steps,
+                )
+                agent_failed = True
+                break
             planner_trace = {}
             if hasattr(agent, "get_trace"):
                 planner_trace = agent.get_trace() or {}
@@ -175,24 +203,44 @@ def evaluate_episodes(
             ep_transitions.append((transition["obs"], action, reward, done, transition["next_obs"]))
 
         wall_clock_ms = step_compute_ms
-        if done and getattr(env, "trace_steps", None):
-            trace = EpisodeTrace(
-                env_id=env.__class__.__name__,
-                episode_id=env.episode_id,
-                seed=env.current_seed,
-                steps=env.trace_steps,
-            ).model_dump(mode="json")
+        if agent_failed:
+            # The agent raised mid-episode. Persist whatever partial trace the
+            # env produced so the run is still introspectable, and force a
+            # failure regardless of any goal event seen so far.
+            if getattr(env, "trace_steps", None):
+                trace = EpisodeTrace(
+                    env_id=env.__class__.__name__,
+                    episode_id=env.episode_id,
+                    seed=env.current_seed,
+                    steps=env.trace_steps,
+                ).model_dump(mode="json")
+            else:
+                trace = info.get("episode_trace", {"steps": []})
+            trace = dict(trace)
+            trace["agent_failed"] = True
+            traces.append(trace)
+            achievements = _extract_achievements(trace)
+            success = False
         else:
-            trace = info.get("episode_trace", {"steps": []})
-        traces.append(trace)
-        achievements = _extract_achievements(trace)
+            if done and getattr(env, "trace_steps", None):
+                trace = EpisodeTrace(
+                    env_id=env.__class__.__name__,
+                    episode_id=env.episode_id,
+                    seed=env.current_seed,
+                    steps=env.trace_steps,
+                ).model_dump(mode="json")
+            else:
+                trace = info.get("episode_trace", {"steps": []})
+            traces.append(trace)
+            achievements = _extract_achievements(trace)
 
-        # Honest success: the episode is a success only if the environment
-        # signalled its terminal GOAL event. Fall back to scanning the trace's
-        # events when we did not observe it live (e.g. trace-only envs).
-        if goal_event is not None and not reached_goal:
-            reached_goal = _trace_has_event(trace, goal_event)
-        success = bool(reached_goal)
+            # Honest success: the episode is a success only if the environment
+            # signalled its terminal GOAL event. Fall back to scanning the
+            # trace's events when we did not observe it live (e.g. trace-only
+            # envs).
+            if goal_event is not None and not reached_goal:
+                reached_goal = _trace_has_event(trace, goal_event)
+            success = bool(reached_goal)
 
         episode_transitions.append(ep_transitions)
         episodes.append(

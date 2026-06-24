@@ -1,47 +1,13 @@
 from __future__ import annotations
 
 import json
-import sys
-from importlib import import_module, reload
 
 from fastapi.testclient import TestClient
 
-MODULE_ORDER = [
-    "worldmodel_server.config",
-    "worldmodel_server.db",
-    "worldmodel_server.models",
-    "worldmodel_server.storage",
-    "worldmodel_server.auth",
-    "worldmodel_server.rate_limit",
-    "worldmodel_server.request_logging",
-    "worldmodel_server.seed",
-    "worldmodel_server.migrations",
-    "worldmodel_server.main",
-]
 
-
-def load_test_modules(monkeypatch, tmp_path, *, seed_demo: bool = False, public_limit: int = 240):
-    monkeypatch.setenv("WMG_DB_URL", f"sqlite:///{tmp_path / 'test.db'}")
-    monkeypatch.setenv("WMG_STORAGE_DIR", str(tmp_path / "storage"))
-    monkeypatch.setenv("WMG_UPLOAD_TOKEN", "test-token")
-    monkeypatch.setenv("WMG_AUTO_MIGRATE", "true")
-    monkeypatch.setenv("WMG_ENABLE_METRICS", "false")
-    monkeypatch.setenv("WMG_SEED_DEMO_DATA", "true" if seed_demo else "false")
-    monkeypatch.setenv("WMG_PUBLIC_READ_RATE_LIMIT_PER_MINUTE", str(public_limit))
-    monkeypatch.setenv("WMG_AUTH_WRITE_RATE_LIMIT_PER_MINUTE", "120")
-
-    modules = {}
-    for name in MODULE_ORDER:
-        if name in sys.modules:
-            modules[name] = reload(sys.modules[name])
-        else:
-            modules[name] = import_module(name)
-    return modules
-
-
-def test_seed_demo_data_populates_leaderboard(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path, seed_demo=True)
-    app = modules["worldmodel_server.main"].app
+def test_seed_demo_data_populates_leaderboard(server_modules):
+    modules = server_modules(seed_demo=True)
+    app = modules.app
 
     with TestClient(app) as client:
         response = client.get("/api/leaderboard?track=test&include_demo=true")
@@ -52,8 +18,8 @@ def test_seed_demo_data_populates_leaderboard(tmp_path, monkeypatch):
     assert any(row["agent"] == "demo-mpc" for row in rows)
 
 
-def test_public_leaderboard_hides_seeded_demo_rows_by_default(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path, seed_demo=True)
+def test_public_leaderboard_hides_seeded_demo_rows_by_default(server_modules):
+    modules = server_modules(seed_demo=True)
     app = modules["worldmodel_server.main"].app
 
     with TestClient(app) as client:
@@ -64,8 +30,8 @@ def test_public_leaderboard_hides_seeded_demo_rows_by_default(tmp_path, monkeypa
     assert rows == []
 
 
-def test_api_key_can_create_and_upload_run(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_api_key_can_create_and_upload_run(server_modules):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
     create_api_key = modules["worldmodel_server.auth"].create_api_key
     session_local = modules["worldmodel_server.db"].SessionLocal
@@ -106,8 +72,8 @@ def test_api_key_can_create_and_upload_run(tmp_path, monkeypatch):
     assert any(row["run_id"] == run_id for row in leaderboard.json())
 
 
-def test_leaderboard_is_ranked_by_success_rate(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_leaderboard_is_ranked_by_success_rate(server_modules):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
     create_api_key = modules["worldmodel_server.auth"].create_api_key
     session_local = modules["worldmodel_server.db"].SessionLocal
@@ -143,8 +109,8 @@ def test_leaderboard_is_ranked_by_success_rate(tmp_path, monkeypatch):
     assert [row["run_id"] for row in rows] == ["high_run", "low_run"]
 
 
-def test_public_rate_limit_returns_429(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path, public_limit=1)
+def test_public_rate_limit_returns_429(server_modules):
+    modules = server_modules(public_limit=1)
     app = modules["worldmodel_server.main"].app
 
     with TestClient(app) as client:
@@ -155,8 +121,8 @@ def test_public_rate_limit_returns_429(tmp_path, monkeypatch):
     assert second.status_code == 429
 
 
-def test_legacy_upload_token_rejected_when_disabled(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_legacy_upload_token_rejected_when_disabled(server_modules):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
 
     with TestClient(app) as client:
@@ -169,8 +135,8 @@ def test_legacy_upload_token_rejected_when_disabled(tmp_path, monkeypatch):
     assert response.status_code == 401
 
 
-def test_trigger_endpoint_reports_not_implemented(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_trigger_endpoint_reports_not_implemented(server_modules):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
     create_api_key = modules["worldmodel_server.auth"].create_api_key
     session_local = modules["worldmodel_server.db"].SessionLocal
@@ -187,8 +153,8 @@ def test_trigger_endpoint_reports_not_implemented(tmp_path, monkeypatch):
     assert response.status_code == 501
 
 
-def test_readyz_reports_component_checks(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_readyz_reports_component_checks(server_modules):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
 
     with TestClient(app) as client:
@@ -203,9 +169,9 @@ def test_readyz_reports_component_checks(tmp_path, monkeypatch):
     assert payload["checks"]["auth"]["legacy_upload_token_enabled"] is False
 
 
-def test_bootstrap_api_key_is_created_once(tmp_path, monkeypatch):
+def test_bootstrap_api_key_is_created_once(server_modules, monkeypatch):
     monkeypatch.setenv("WMG_BOOTSTRAP_API_KEY", "bootstrap_key_for_tests_123456")
-    modules = load_test_modules(monkeypatch, tmp_path)
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
     session_local = modules["worldmodel_server.db"].SessionLocal
     api_key_model = modules["worldmodel_server.models"].ApiKey
@@ -252,8 +218,8 @@ def _upload_run(client, secret, run_id, success_rate, mean_return):
     )
 
 
-def test_leaderboard_pagination_limit_and_offset(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_leaderboard_pagination_limit_and_offset(server_modules):
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     try:
         _upload_run(client, secret, "run_a", 0.90, 0.9)
@@ -269,8 +235,8 @@ def test_leaderboard_pagination_limit_and_offset(tmp_path, monkeypatch):
     assert [r["run_id"] for r in page2] == ["run_c"]
 
 
-def test_leaderboard_limit_bounds_enforced(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_leaderboard_limit_bounds_enforced(server_modules):
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     try:
         too_small = client.get("/api/leaderboard?track=test&limit=0")
@@ -286,8 +252,8 @@ def test_leaderboard_limit_bounds_enforced(tmp_path, monkeypatch):
     assert ok.status_code == 200
 
 
-def test_leaderboard_ranked_by_sql_columns(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_leaderboard_ranked_by_sql_columns(server_modules):
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     try:
         _upload_run(client, secret, "low_run", 0.20, 0.18)
@@ -308,9 +274,9 @@ def test_leaderboard_ranked_by_sql_columns(tmp_path, monkeypatch):
     assert [r["run_id"] for r in rows] == ["high_run", "mid_run", "low_run"]
 
 
-def test_oversized_upload_rejected_with_413(tmp_path, monkeypatch):
+def test_oversized_upload_rejected_with_413(server_modules, monkeypatch):
     monkeypatch.setenv("WMG_MAX_UPLOAD_BYTES", "1024")
-    modules = load_test_modules(monkeypatch, tmp_path)
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     try:
         client.post(
@@ -329,9 +295,9 @@ def test_oversized_upload_rejected_with_413(tmp_path, monkeypatch):
     assert oversized.status_code == 413
 
 
-def test_oversized_upload_leaves_no_artifact(tmp_path, monkeypatch):
+def test_oversized_upload_leaves_no_artifact(server_modules, tmp_path, monkeypatch):
     monkeypatch.setenv("WMG_MAX_UPLOAD_BYTES", "1024")
-    modules = load_test_modules(monkeypatch, tmp_path)
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     storage_dir = tmp_path / "storage"
     try:
@@ -351,8 +317,8 @@ def test_oversized_upload_leaves_no_artifact(tmp_path, monkeypatch):
     assert not (storage_dir / "big_run").exists()
 
 
-def test_readyz_uses_write_probe(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_readyz_uses_write_probe(server_modules, monkeypatch):
+    modules = server_modules()
     app = modules["worldmodel_server.main"].app
     main_mod = modules["worldmodel_server.main"]
 
@@ -373,8 +339,8 @@ def test_readyz_uses_write_probe(tmp_path, monkeypatch):
     assert response.json()["checks"]["storage"]["ok"] is True
 
 
-def test_upload_commit_failure_leaves_no_orphan_artifact(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_upload_commit_failure_leaves_no_orphan_artifact(server_modules, tmp_path, monkeypatch):
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     storage_dir = tmp_path / "storage"
     run_id = "commit_fail_run"
@@ -414,8 +380,8 @@ def test_upload_commit_failure_leaves_no_orphan_artifact(tmp_path, monkeypatch):
     assert not (storage_dir / run_id / "metrics.json").exists()
 
 
-def test_reupload_is_idempotent(tmp_path, monkeypatch):
-    modules = load_test_modules(monkeypatch, tmp_path)
+def test_reupload_is_idempotent(server_modules):
+    modules = server_modules()
     client, secret = _make_writer_client(modules)
     try:
         first = _upload_run(client, secret, "redo_run", 0.3, 0.3)

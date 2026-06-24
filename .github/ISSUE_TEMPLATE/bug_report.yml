@@ -22,7 +22,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Example: macOS + Docker, Render production, Vercel preview.
+      description: "Example: macOS + Docker, Render production, Vercel preview."
       placeholder: macOS 15 / Docker Desktop / Chrome 135
   - type: textarea
     id: logs

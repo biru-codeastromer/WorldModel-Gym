@@ -2,7 +2,7 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(VENV)/bin/pip
 
-.PHONY: setup test lint demo paper deploy stop deploy-public stop-public deploy-vercel seed-demo create-api-key verify-deployment
+.PHONY: setup test lint lock demo paper deploy stop deploy-public stop-public deploy-vercel seed-demo create-api-key verify-deployment
 
 setup:
 	python3 -m venv $(VENV)
@@ -18,6 +18,18 @@ test:
 lint:
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
+
+# Regenerate the fully-pinned, hash-pinned supply-chain lockfile (requirements.lock).
+# Captures the third-party dependency closure of the five local packages plus dev tools.
+# The local packages themselves are editable installs and are NOT hash-pinned.
+# Consume with: pip install --require-hashes --no-deps -r requirements.lock
+#               pip install --no-deps -e core -e planners -e worldmodels -e agents -e server
+lock:
+	uv pip compile --generate-hashes --custom-compile-command "make lock" \
+		--output-file requirements.lock \
+		core/pyproject.toml planners/pyproject.toml worldmodels/pyproject.toml \
+		agents/pyproject.toml server/pyproject.toml requirements-dev.txt
+	@printf '#\n# Consume (reproducible install):\n#   pip install --require-hashes --no-deps -r requirements.lock\n#   pip install --no-deps -e core -e planners -e worldmodels -e agents -e server\n# Audit:   pip-audit -r requirements.lock\n#\n%s\n' "$$(cat requirements.lock)" > requirements.lock.tmp && mv requirements.lock.tmp requirements.lock
 
 demo:
 	@if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \

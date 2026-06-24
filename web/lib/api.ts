@@ -99,10 +99,36 @@ export async function fetchTrace(runId: string) {
     throw new Error("failed to fetch trace");
   }
   const txt = await res.text();
-  return txt
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
+  return parseTraceNdjson(txt);
+}
+
+/**
+ * Parse NDJSON trace text into an array of records.
+ *
+ * Robustness fix (Phase 4 / workstream 3): previously this mapped every
+ * non-empty line through `JSON.parse` with no error handling, so a single
+ * malformed or truncated line (common when a trace stream is cut off mid-write)
+ * would throw and discard the entire trace. We now skip lines that fail to
+ * parse instead of throwing, so a partial trace still renders. Skipped lines
+ * are reported via the optional `onError` callback for diagnostics.
+ */
+export function parseTraceNdjson(
+  text: string,
+  onError?: (line: string, error: unknown) => void
+): unknown[] {
+  const records: unknown[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      records.push(JSON.parse(trimmed));
+    } catch (error) {
+      onError?.(trimmed, error);
+    }
+  }
+  return records;
 }
 
 export async function createRun(payload: RunCreatePayload, apiKey: string) {

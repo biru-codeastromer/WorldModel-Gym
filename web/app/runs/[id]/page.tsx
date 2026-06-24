@@ -6,31 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 
 import { fetchRun, fetchTrace } from "@/lib/api";
-
-function normalizeEpisodes(trace: any[]) {
-  if (trace.every((entry) => Array.isArray(entry?.steps))) {
-    return trace;
-  }
-  return [
-    {
-      steps: trace.map((step: any, index) => ({
-        ...step,
-        t: step?.t ?? step?.step ?? index,
-        events: Array.isArray(step?.events) ? step.events : []
-      }))
-    }
-  ];
-}
-
-function extractEvents(trace: any[]) {
-  const events: { t: number; name: string }[] = [];
-  trace.forEach((episode) => {
-    (episode.steps ?? []).forEach((step: any) => {
-      (step.events ?? []).forEach((evt: string) => events.push({ t: step.t, name: evt }));
-    });
-  });
-  return events;
-}
+import { extractEvents, normalizeEpisodes } from "@/lib/trace";
 
 export default function RunViewerPage() {
   const params = useParams<{ id: string }>();

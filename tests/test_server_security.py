@@ -1,46 +1,12 @@
 from __future__ import annotations
 
 import json
-import sys
-from importlib import import_module, reload
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from worldmodel_server.config import Settings
 from worldmodel_server.storage import run_dir, validate_run_id
-
-_MODULE_ORDER = [
-    "worldmodel_server.config",
-    "worldmodel_server.db",
-    "worldmodel_server.models",
-    "worldmodel_server.storage",
-    "worldmodel_server.auth",
-    "worldmodel_server.rate_limit",
-    "worldmodel_server.request_logging",
-    "worldmodel_server.seed",
-    "worldmodel_server.migrations",
-    "worldmodel_server.main",
-]
-
-
-def _load_server_modules(monkeypatch, tmp_path):
-    monkeypatch.setenv("WMG_DB_URL", f"sqlite:///{tmp_path / 'test.db'}")
-    monkeypatch.setenv("WMG_STORAGE_DIR", str(tmp_path / "storage"))
-    monkeypatch.setenv("WMG_UPLOAD_TOKEN", "test-token")
-    monkeypatch.setenv("WMG_AUTO_MIGRATE", "true")
-    monkeypatch.setenv("WMG_ENABLE_METRICS", "false")
-    monkeypatch.setenv("WMG_SEED_DEMO_DATA", "false")
-    monkeypatch.setenv("WMG_PUBLIC_READ_RATE_LIMIT_PER_MINUTE", "240")
-    monkeypatch.setenv("WMG_AUTH_WRITE_RATE_LIMIT_PER_MINUTE", "120")
-
-    modules = {}
-    for name in _MODULE_ORDER:
-        if name in sys.modules:
-            modules[name] = reload(sys.modules[name])
-        else:
-            modules[name] = import_module(name)
-    return modules
 
 
 def test_validate_run_id_rejects_path_traversal():
@@ -101,12 +67,12 @@ def test_default_dev_token_allowed_in_development(monkeypatch):
     settings.validate()  # should not raise
 
 
-def test_upload_persists_backend_agnostic_keys_and_reads_back(tmp_path, monkeypatch):
-    modules = _load_server_modules(monkeypatch, tmp_path)
-    app = modules["worldmodel_server.main"].app
-    create_api_key = modules["worldmodel_server.auth"].create_api_key
-    session_local = modules["worldmodel_server.db"].SessionLocal
-    run_model = modules["worldmodel_server.models"].RunEntry
+def test_upload_persists_backend_agnostic_keys_and_reads_back(server_modules, tmp_path):
+    modules = server_modules()
+    app = modules.app
+    create_api_key = modules.create_api_key
+    session_local = modules.SessionLocal
+    run_model = modules.models.RunEntry
 
     run_id = "keytest_run"
     storage_dir = tmp_path / "storage"

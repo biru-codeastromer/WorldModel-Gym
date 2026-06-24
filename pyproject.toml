@@ -3,6 +3,25 @@ addopts = "-q"
 testpaths = ["tests"]
 pythonpath = ["core", "agents", "planners", "worldmodels", "server"]
 
+[tool.coverage.run]
+# Coverage is wired into the CI pytest invocation (--cov), never into pytest
+# addopts, so running a single test file locally never trips the gate. We
+# measure the five first-party packages by their import names.
+source = [
+    "worldmodel_gym",
+    "worldmodel_agents",
+    "worldmodel_planners",
+    "worldmodel_models",
+    "worldmodel_server",
+]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

@@ -21,6 +21,8 @@ dist/
 build/
 .DS_Store
 coverage.xml
+.coverage
+.coverage.*
 htmlcov/
 *.log
 runs/*
