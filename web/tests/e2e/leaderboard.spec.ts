@@ -105,15 +105,19 @@ test("leaderboard rows navigate into a run detail view and back", async ({
 
   const firstRow = table.locator('tbody tr[role="link"]').first();
   await expect(firstRow).toBeVisible({ timeout: 15_000 });
-  await firstRow.click();
-
-  await expect(page).toHaveURL(/\/runs\//);
+  // Rows navigate via a client onClick, so retry the click until the SPA has
+  // hydrated and the navigation actually fires (avoids a pre-hydration no-op).
+  await expect(async () => {
+    await firstRow.click();
+    await expect(page).toHaveURL(/\/runs\//, { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 
   // The run detail surface shows headline metrics (success rate is stable copy).
   await expect(page.getByText(/success rate/i).first()).toBeVisible();
 
-  // And offers a path back to the leaderboard.
-  await page.getByRole("link", { name: /back to leaderboard/i }).click();
+  // And offers a path back to the leaderboard (the run header back link, scoped
+  // to <main> so it doesn't collide with the primary-nav Leaderboard link).
+  await page.getByRole("main").getByRole("link", { name: /leaderboard/i }).first().click();
   await expect(page).toHaveURL(/\/leaderboard/);
 });
 
@@ -151,10 +155,12 @@ test("selecting two runs and pressing Compare opens the comparison view", async 
   const table = page.locator("table");
   await expect(table).toBeVisible({ timeout: 15_000 });
 
-  // The per-row comparison checkboxes are exposed by accessible name
-  // ("Add run … to comparison"). Tick the first two available.
-  const checks = table.getByRole("checkbox", { name: /add run .* to comparison/i });
-  await expect(checks.first()).toBeVisible({ timeout: 15_000 });
+  // The per-row comparison checkboxes flip their accessible name when ticked
+  // ("Add run … to comparison" -> "Remove run … from comparison"), so match
+  // BOTH states; otherwise checking the first row drops it from the locator set
+  // and nth(1) never resolves. Wait for a second row to exist before ticking.
+  const checks = table.getByRole("checkbox", { name: /run .* comparison/i });
+  await expect(checks.nth(1)).toBeVisible({ timeout: 15_000 });
   await checks.nth(0).check();
   await checks.nth(1).check();
 
@@ -197,13 +203,14 @@ test("the docs site renders with a section sidebar", async ({ page }) => {
   const docsNav = page.getByRole("navigation", { name: /documentation sections/i });
   await expect(docsNav).toBeVisible({ timeout: 15_000 });
 
-  const overviewLink = docsNav.getByRole("link", { name: /overview/i }).first();
-  await expect(overviewLink).toBeVisible();
-  await overviewLink.click();
-  await expect(page).toHaveURL(/\/docs\/overview/);
+  // Section links are titled by their section heading (e.g. "Quickstart").
+  const quickstartLink = docsNav.getByRole("link", { name: /quickstart/i }).first();
+  await expect(quickstartLink).toBeVisible();
+  await quickstartLink.click();
+  await expect(page).toHaveURL(/\/docs\/quickstart/);
 
   // The active section carries aria-current for assistive tech.
   await expect(
-    docsNav.getByRole("link", { name: /overview/i }).first()
+    docsNav.getByRole("link", { name: /quickstart/i }).first()
   ).toHaveAttribute("aria-current", "page");
 });

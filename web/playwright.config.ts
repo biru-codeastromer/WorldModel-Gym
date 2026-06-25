@@ -26,6 +26,9 @@ export default defineConfig({
             WMG_DB_URL: "sqlite:///./.tmp/e2e.db",
             WMG_STORAGE_DIR: "./.tmp/e2e-storage",
             WMG_UPLOAD_TOKEN: "e2e-token",
+            // global-setup uploads seed runs via the legacy upload token, which
+            // is off by default — enable it for the managed local e2e server.
+            WMG_LEGACY_UPLOAD_TOKEN_ENABLED: "true",
             WMG_AUTO_MIGRATE: "true",
             WMG_ENABLE_METRICS: "false",
             WMG_SEED_DEMO_DATA: "false"

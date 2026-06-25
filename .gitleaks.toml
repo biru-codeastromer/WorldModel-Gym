@@ -1,0 +1,27 @@
+# gitleaks configuration for WorldModel Gym.
+#
+# Extends the default ruleset and allowlists known false positives. The repo
+# intentionally contains NO real secrets: production secrets are dashboard-
+# managed (Render/Vercel env vars, `sync: false` / `generateValue: true` in
+# render.yaml), and the dev/test tokens below are non-secret fixtures.
+
+title = "WorldModel Gym gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist non-secret config-key names and dev/test fixtures"
+# render.yaml only declares env-var KEY NAMES (e.g. `- key: WMG_S3_BUCKET`); the
+# secret VALUES are never committed (sync:false / generateValue:true). The
+# generic-api-key rule mis-flags these key declarations.
+paths = [
+  '''render\.yaml''',
+]
+# Non-secret, well-known dev/test fixtures used across the test suite, docs,
+# docker-compose, and CI (never used for real auth in production).
+regexes = [
+  '''WMG_[A-Z0-9_]+''',
+  '''(dev|e2e|test|ui|upload)-token''',
+  '''bootstrap_key_for_tests_[0-9]+''',
+]

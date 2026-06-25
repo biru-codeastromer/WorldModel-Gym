@@ -40,6 +40,14 @@ export default async function globalSetup() {
       track: "test",
     },
     {
+      // A second run on the test track so the run-comparison flow has two
+      // selectable rows to tick.
+      runId: `e2e_oracle_test_${uniqueSuffix}`,
+      agent: "greedy_oracle",
+      env: "switch_quest",
+      track: "test",
+    },
+    {
       runId: `e2e_oracle_train_${uniqueSuffix}`,
       agent: "greedy_oracle",
       env: "switch_quest",
